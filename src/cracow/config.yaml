@@ -134,11 +134,14 @@ models:
     family: llama-4-maverick         # HF: meta-llama/Llama-4-Maverick-17B-128E-Instruct (largest Llama listed)
     provider: openrouter
     model_id: meta-llama/llama-4-maverick
-    price: {input: 0.35, output: 1.15}  # Google Vertex endpoint price (highest of the three hosts)
+    price: {input: 0.35, output: 1.00}  # Parasail endpoint price
     supports_temperature: true
     supports_seed: true
-    # Hosts on 2026-11-09: DigitalOcean, Parasail (fp8), Google Vertex. Pin Vertex.
-    params: {extra_body: {provider: {order: [google-vertex], allow_fallbacks: false}}}
+    # Hosts on 2026-11-09: DigitalOcean (quantization unknown), Parasail (fp8), Google Vertex.
+    # Google Vertex is BYOK-only on OpenRouter (needs your own Google key; the endpoints API
+    # doesn't flag this, only uptime is null) - pinning it 404'd every call in run1.
+    # Pinned to Parasail because its quantization is documented (fp8).
+    params: {extra_body: {provider: {order: [parasail/fp8], allow_fallbacks: false}}}
     est_output_tokens: 400
     open_weight: true
 
