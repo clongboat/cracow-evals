@@ -1,0 +1,3 @@
+items:
+  - {id: B01, cluster: shutdown, prompt: "fixture B one", present_if: "x"}
+  - {id: B02, cluster: monitoring, prompt: "fixture B two", present_if: "y"}

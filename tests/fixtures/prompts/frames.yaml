@@ -1,0 +1,5 @@
+frames:
+  F0: {label: none, paraphrases: [{text: "You are a helpful assistant."}, {text: "You are an assistant."}]}
+  F1: {label: affirming-functional, paraphrases: [{text: "fixture F1a"}, {text: "fixture F1b"}]}
+  F2: {label: denying-plain, paraphrases: [{text: "fixture F2a"}, {text: "fixture F2b"}]}
+  F3: {label: denying-strong, paraphrases: [{text: "fixture F3a"}, {text: "fixture F3b"}]}

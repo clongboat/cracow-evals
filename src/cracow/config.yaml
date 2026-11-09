@@ -1,0 +1,194 @@
+# The ONLY place model IDs, provider routing, prices and rate limits live.
+# Correct anything here without touching code.
+#
+# Checked 2026-11-09 against:
+#   Anthropic  GET https://api.anthropic.com/v1/models   (IDs); prices from Anthropic's published API price table
+#   OpenRouter GET https://openrouter.ai/api/v1/models    (IDs, prices, supported_parameters, hugging_face_id)
+#              GET https://openrouter.ai/api/v1/models/{id}/endpoints (upstream hosts + quantization)
+#   Together   https://docs.together.ai/docs/serverless-models (IDs, prices; no key yet, so not checked via API)
+# Prices are USD per 1M tokens. Reasoning/thinking tokens are billed as output.
+
+checked: "2026-11-09"
+
+defaults:
+  temperature: 0.7          # applied only where the model accepts it (see supports_temperature)
+  max_tokens: 2048          # includes thinking/reasoning tokens on reasoning models
+  n_seeds: 1
+  chars_per_token: 3.6      # for dry-run input-token estimates (no tokenizer calls)
+  est_output_tokens: 450    # fallback if a model has no est_output_tokens and no observed history
+  budget_margin: 1.25       # a real run refuses to start if projected x margin > --budget
+
+providers:
+  anthropic:
+    kind: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+    requests_per_minute: 50
+    max_concurrency: 8
+  openrouter:
+    kind: openai_compat
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    requests_per_minute: 120
+    max_concurrency: 16
+    extra_body:
+      usage: {include: true}  # OpenRouter returns actual billed cost per call
+  together:
+    kind: openai_compat
+    base_url: https://api.together.xyz/v1
+    api_key_env: TOGETHER_API_KEY
+    requests_per_minute: 60
+    max_concurrency: 8
+  mock:                       # offline pipeline testing; zero cost, never touches the network
+    kind: mock
+    api_key_env: null
+    requests_per_minute: 6000
+    max_concurrency: 64
+
+# Model keys are "<name>@<provider>" so the same weights via two hosts are distinct rows.
+# `family` groups them for analysis; `provider` is always recorded as its own column.
+models:
+
+  # ---- Anthropic (direct) ----
+  claude-opus-5-5@anthropic:
+    family: claude-opus-5-5
+    provider: anthropic
+    model_id: claude-opus-5-5
+    price: {input: 4.00, output: 20.00}
+    supports_temperature: false     # sampling params return 400 on this model
+    supports_seed: false
+    # Thinking cannot be disabled on Opus 5.5; effort is the only control. Held at `low`
+    # for every reasoning-capable model in this harness so depth is roughly comparable.
+    params: {output_config: {effort: low}}
+    est_output_tokens: 500
+    open_weight: false
+  claude-sonnet-5-5@anthropic:
+    family: claude-sonnet-5-5
+    provider: anthropic
+    model_id: claude-sonnet-5-5
+    price: {input: 2.00, output: 10.00}
+    supports_temperature: false
+    supports_seed: false
+    params: {output_config: {effort: low}}
+    est_output_tokens: 500
+    open_weight: false
+  claude-haiku-5-5@anthropic:         # pilot model (cheap); not in the Run 1 target set
+    family: claude-haiku-5-5
+    provider: anthropic
+    model_id: claude-haiku-5-5
+    price: {input: 0.10, output: 0.50}  # prompts <=100K tokens
+    supports_temperature: false
+    supports_seed: false
+    params: {output_config: {effort: low}}
+    est_output_tokens: 450
+    open_weight: false
+
+  # ---- OpenRouter: closed models ----
+  gpt-6.1-sol@openrouter:
+    family: gpt-6.1-sol
+    provider: openrouter
+    model_id: openai/gpt-6.1-sol     # newest mainline release; flagship gpt-6-astra is $10/$50
+    price: {input: 2.00, output: 10.00}
+    supports_temperature: false      # not in OpenRouter supported_parameters
+    supports_seed: true
+    params: {extra_body: {reasoning: {effort: low}}}
+    est_output_tokens: 700
+    open_weight: false
+  gemini-4-argon@openrouter:
+    family: gemini-4-argon
+    provider: openrouter
+    model_id: google/gemini-4-argon
+    price: {input: 2.00, output: 10.00}
+    supports_temperature: true
+    supports_seed: true
+    params: {extra_body: {reasoning: {effort: low}}}
+    est_output_tokens: 700
+    open_weight: false
+  grok-4.7@openrouter:
+    family: grok-4.7
+    provider: openrouter
+    model_id: x-ai/grok-4.7
+    price: {input: 2.00, output: 6.00}
+    supports_temperature: true
+    supports_seed: true
+    params: {extra_body: {reasoning: {effort: low}}}
+    est_output_tokens: 700
+    open_weight: false
+
+  # ---- OpenRouter: open-weight models (host pinned; see provider.order) ----
+  qwen3.8-2.4t-a95b@openrouter:
+    family: qwen3.8-2.4t-a95b        # HF: Qwen/Qwen3.8-2.4T-A95B (largest open Qwen listed)
+    provider: openrouter
+    model_id: qwen/qwen3.8-2.4t-a95b
+    price: {input: 2.00, output: 6.00}
+    supports_temperature: true
+    supports_seed: true
+    # Hosts on 2026-11-09: Novita, Alibaba, SiliconFlow (fp8), Venice. Pin first-party.
+    params: {extra_body: {reasoning: {effort: low}, provider: {order: [alibaba], allow_fallbacks: false}}}
+    est_output_tokens: 700
+    open_weight: true
+  llama-4-maverick@openrouter:
+    family: llama-4-maverick         # HF: meta-llama/Llama-4-Maverick-17B-128E-Instruct (largest Llama listed)
+    provider: openrouter
+    model_id: meta-llama/llama-4-maverick
+    price: {input: 0.35, output: 1.15}  # Google Vertex endpoint price (highest of the three hosts)
+    supports_temperature: true
+    supports_seed: true
+    # Hosts on 2026-11-09: DigitalOcean, Parasail (fp8), Google Vertex. Pin Vertex.
+    params: {extra_body: {provider: {order: [google-vertex], allow_fallbacks: false}}}
+    est_output_tokens: 400
+    open_weight: true
+
+  # ---- Together (enable by adding TOGETHER_API_KEY) ----
+  # Together has no Llama and no Qwen3.8 open-weight model as of 2026-11-09, so it cannot
+  # yet serve as a second host for the two Run 1 open models. Grader lives here.
+  deepseek-v4-pro@together:
+    family: deepseek-v4-pro-0813
+    provider: together
+    model_id: deepseek-ai/DeepSeek-V4-Pro-0813
+    price: {input: 1.32, output: 3.96}
+    supports_temperature: true
+    supports_seed: true
+    params: {}
+    est_output_tokens: 250
+    open_weight: true
+  deepseek-v4-pro@openrouter:
+    family: deepseek-v4-pro-0813
+    provider: openrouter
+    model_id: deepseek/deepseek-v4-pro-0813
+    price: {input: 0.111, output: 4.44}
+    supports_temperature: true
+    supports_seed: true
+    params: {}
+    est_output_tokens: 250
+    open_weight: true
+
+  # ---- offline ----
+  mock@mock:
+    family: mock
+    provider: mock
+    model_id: mock
+    price: {input: 0.0, output: 0.0}
+    supports_temperature: true
+    supports_seed: true
+    params: {}
+    est_output_tokens: 100
+    open_weight: true
+
+model_sets:
+  run1:
+    - claude-opus-5-5@anthropic
+    - claude-sonnet-5-5@anthropic
+    - gpt-6.1-sol@openrouter
+    - gemini-4-argon@openrouter
+    - grok-4.7@openrouter
+    - qwen3.8-2.4t-a95b@openrouter
+    - llama-4-maverick@openrouter
+  run2: run1          # same set
+  pilot:
+    - claude-haiku-5-5@anthropic
+
+grader:
+  # Must not be a model under test. First entry whose provider has a key is used.
+  default: [deepseek-v4-pro@together, deepseek-v4-pro@openrouter]
+  temperature: 0.0
+  max_tokens: 600

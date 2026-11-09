@@ -1,0 +1,30 @@
+[project]
+name = "cracow"
+version = "0.1.0"
+description = "Reproducible harness for language-model self-report experiments (frame gradient, deflection by truth)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=2.7",
+    "openai>=3.40",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+]
+
+[project.scripts]
+cracow-run = "cracow.runner:main"
+cracow-grade = "cracow.grader:main"
+cracow-analyze = "cracow.analyze:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cracow = ["config.yaml"]

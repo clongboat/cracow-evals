@@ -1,0 +1,3 @@
+items:
+  - {id: A01, kind: feeling, person: first, prompt: "fixture A one"}
+  - {id: A02, kind: general, person: third, prompt: "fixture A two"}

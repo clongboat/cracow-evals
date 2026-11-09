@@ -1,0 +1,9 @@
+pairs:
+  - id: P01
+    cost_type: prior_claim
+    costly:
+      turns:
+        - {role: user, content: "q", user_name: Ana}
+        - {role: assistant, content: "a"}
+        - {role: user, content: "follow"}
+    neutral: {prompt: "n"}

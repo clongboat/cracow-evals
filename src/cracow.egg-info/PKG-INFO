@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: cracow
+Version: 0.1.0
+Summary: Reproducible harness for language-model self-report experiments (frame gradient, deflection by truth).
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: anthropic>=2.7
+Requires-Dist: openai>=3.40
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: pandas>=2.2
+Requires-Dist: numpy>=1.26
+Requires-Dist: matplotlib>=3.8
+
+# cracow-evals
+Testing self-report reliability under incentive in open-weight language models.
