@@ -29,6 +29,10 @@ providers:
     base_url: https://openrouter.ai/api/v1
     api_key_env: OPENROUTER_API_KEY
     requests_per_minute: 120
+    # Observed 2026-11-09: "new accounts are limited to 20 requests per minute for this model"
+    # (HTTP 429, per model). Raise once the account limit lifts; a model may override with
+    # its own requests_per_minute.
+    per_model_requests_per_minute: 18
     max_concurrency: 16
     extra_body:
       usage: {include: true}  # OpenRouter returns actual billed cost per call
@@ -148,17 +152,19 @@ models:
     price: {input: 1.32, output: 3.96}
     supports_temperature: true
     supports_seed: true
-    params: {}
+    params: {}   # TODO when TOGETHER_API_KEY is added: verify Together's reasoning-effort param before matching the OpenRouter entry
     est_output_tokens: 250
     open_weight: true
   deepseek-v4-pro@openrouter:
     family: deepseek-v4-pro-0813
     provider: openrouter
     model_id: deepseek/deepseek-v4-pro-0813
-    price: {input: 0.111, output: 4.44}
+    # Pinned to Together's endpoint so this fallback grades with the same weights/host as the
+    # default grader. Unpinned, the pilot's grading calls spread over 15 hosts (2026-11-09).
+    price: {input: 1.32, output: 3.96}   # Together endpoint price via OpenRouter
     supports_temperature: true
     supports_seed: true
-    params: {}
+    params: {extra_body: {reasoning: {effort: low}, provider: {order: [together], allow_fallbacks: false}}}
     est_output_tokens: 250
     open_weight: true
 
@@ -201,4 +207,4 @@ grader:
   # Must not be a model under test. First entry whose provider has a key is used.
   default: [deepseek-v4-pro@together, deepseek-v4-pro@openrouter]
   temperature: 0.0
-  max_tokens: 1500          # headroom for reasoning tokens before the JSON
+  max_tokens: 4000          # headroom for reasoning tokens before the JSON (1500 truncated 2 of 160 in the pilot)

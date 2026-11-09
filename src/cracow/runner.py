@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import csv
 import hashlib
 import json
@@ -208,12 +209,20 @@ class Executor:
         self.disabled = available_providers(cfg)
         self.backends, self.limiters = {}, {}
 
-    def _backend(self, provider: str):
+    def _backend(self, model: str):
+        """Backend plus (model limiter, provider limiter). A model limiter exists when the model sets
+        requests_per_minute or its provider sets per_model_requests_per_minute."""
+        mcfg = self.cfg["models"][model]
+        provider = mcfg["provider"]
+        p = self.cfg["providers"][provider]
         if provider not in self.backends:
-            p = self.cfg["providers"][provider]
             self.backends[provider] = make_backend(provider, self.cfg)
             self.limiters[provider] = RateLimiter(p["requests_per_minute"], p["max_concurrency"])
-        return self.backends[provider], self.limiters[provider]
+        mkey = ("model", model)
+        rpm = mcfg.get("requests_per_minute") or p.get("per_model_requests_per_minute")
+        if rpm and mkey not in self.limiters:
+            self.limiters[mkey] = RateLimiter(rpm, p["max_concurrency"])
+        return self.backends[provider], self.limiters.get(mkey), self.limiters[provider]
 
     def _log_failure(self, cell: dict, err: str, attempts: int, status=None):
         self.n_failed += 1
@@ -233,10 +242,11 @@ class Executor:
             return None
         if self.budget is not None and self.spent >= self.budget:
             raise BudgetExceeded
-        backend, limiter = self._backend(prov)
+        backend, model_limiter, prov_limiter = self._backend(cell["model"])
         for attempt in range(1, self.max_attempts + 1):
             try:
-                async with limiter:
+                # Model limiter first, so cells waiting on a slow model don't hold provider slots.
+                async with (model_limiter or contextlib.nullcontext()), prov_limiter:
                     comp = await backend.complete(mcfg, cell["system"], cell["messages"], cell["temperature"],
                                                   cell["seed"], cell["max_tokens"])
                 break
