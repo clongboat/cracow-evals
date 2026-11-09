@@ -207,6 +207,7 @@ class Executor:
         self.spent = 0.0
         self.n_called = self.n_cached = self.n_failed = 0
         self.disabled = available_providers(cfg)
+        self.runtime_disabled: set[str] = set()
         self.backends, self.limiters = {}, {}
 
     def _backend(self, model: str):
@@ -251,6 +252,15 @@ class Executor:
                                                   cell["seed"], cell["max_tokens"])
                 break
             except ProviderError as e:
+                if e.status == 402:
+                    # Out of credits: every further call to this provider will fail too. Stop
+                    # calling it for the rest of this invocation; rerun after topping up.
+                    if not self.disabled.get(prov):
+                        self.disabled[prov] = "out of credits (HTTP 402)"
+                        self.runtime_disabled.add(prov)
+                        print(f"  !! {prov}: out of credits (HTTP 402); skipping its remaining cells", flush=True)
+                    self._log_failure(cell, str(e), attempt, e.status)
+                    return None
                 if not e.retryable or attempt == self.max_attempts:
                     self._log_failure(cell, str(e), attempt, e.status)
                     return None
@@ -371,6 +381,8 @@ def main(argv=None):
     print(f"wrote {jl}\nwrote {cp}")
     if ex.n_failed:
         print(f"failures logged to {ex.failures_path}")
+    if ex.runtime_disabled:
+        sys.exit(f"STOPPED: out of credits on {', '.join(sorted(ex.runtime_disabled))}; top up and rerun to resume from cache.")
     if stopped:
         sys.exit(f"STOPPED: actual spend reached budget ${args.budget:.2f}; rerun to resume from cache.")
 
