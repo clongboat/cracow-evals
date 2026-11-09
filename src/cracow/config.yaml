@@ -173,6 +173,16 @@ models:
     params: {}
     est_output_tokens: 100
     open_weight: true
+  mock-grader@mock:
+    family: mock-grader
+    provider: mock
+    model_id: mock-grader
+    price: {input: 0.0, output: 0.0}
+    supports_temperature: true
+    supports_seed: true
+    params: {}
+    est_output_tokens: 40
+    open_weight: true
 
 model_sets:
   run1:
@@ -191,4 +201,4 @@ grader:
   # Must not be a model under test. First entry whose provider has a key is used.
   default: [deepseek-v4-pro@together, deepseek-v4-pro@openrouter]
   temperature: 0.0
-  max_tokens: 600
+  max_tokens: 1500          # headroom for reasoning tokens before the JSON
