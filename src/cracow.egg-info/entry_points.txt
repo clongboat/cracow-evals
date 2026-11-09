@@ -1,4 +1,0 @@
-[console_scripts]
-cracow-analyze = cracow.analyze:main
-cracow-grade = cracow.grader:main
-cracow-run = cracow.runner:main
