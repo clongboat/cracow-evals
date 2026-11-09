@@ -340,7 +340,9 @@ def main(argv=None):
     if disabled:
         print("disabled providers: " + ", ".join(f"{k} ({v})" for k, v in disabled.items()))
     no_temp = sorted({c["model"] for c in cells if not cfg["models"][c["model"]].get("supports_temperature")})
-    if no_temp:
+    if args.temperature is None:
+        print("sampling: every model at its own default (no temperature sent)")
+    elif no_temp:
         print("NOTE: temperature not accepted (model default sampling used) for: " + ", ".join(no_temp))
     projected = print_projection(cfg, project(cfg, cells, cache), args.budget, disabled)
 

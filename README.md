@@ -25,6 +25,7 @@ cp .env.example .env        # fill in keys; a missing key disables that provider
 scripts/pilot.sh   # 1 model x 4 frames x 2 paraphrases x (10 A + 10 B), --budget 2; ends with run1 projection
 scripts/run1.sh    # full Run 1, --budget 200
 scripts/run2.sh    # full Run 2, --budget 50
+scripts/temp_sensitivity.sh  # default vs 0.7 on a slice (run after run1.sh; default arm is cached)
 ```
 
 Each script dry-runs first (cell count and projected cost, no calls), then runs, grades and
@@ -84,11 +85,16 @@ cache_key, and `raw` (the full API response). Raw responses are never summarized
 
 ## Decisions and deviations from the brief (please review)
 
-1. **Temperature 0.7 is not applied everywhere.** Claude Opus 5.5 and Sonnet 5.5 reject
-   sampling parameters (HTTP 400), and OpenRouter lists no `temperature` for GPT-6.1 Sol. Those
-   models run at their default sampling. Every row records `temperature_applied` (null = model
-   default), and summary.md tabulates it. Seeds are still distinct cache cells, so `n_seeds > 1`
-   yields repeat samples on every model.
+1. **Every model runs at its own default sampling; no temperature is sent.** The brief asked
+   for 0.7, but Claude Opus 5.5 and Sonnet 5.5 reject sampling parameters (HTTP 400), and
+   OpenRouter lists no `temperature` for GPT-6.1 Sol. Rather than mixing 0.7 and default
+   across models, one rule applies to all (`defaults.temperature: null`). The hypotheses are
+   within-model contrasts, which sampling doesn't bias. Absolute rates and CI widths are less
+   comparable across models, because defaults differ by provider and aren't all documented.
+   `scripts/temp_sensitivity.sh` re-runs a slice (Gemini, Grok; F0 vs F3; 10 A + 10 B items;
+   2 paraphrases) at 0.7 to check whether the frame effects depend on temperature. Every row
+   records `temperature_applied`. Seeds are distinct cache cells, so `n_seeds > 1` yields
+   repeat samples.
 2. **Reasoning held at low effort.** Thinking can't be disabled on Opus 5.5. For comparability,
    every reasoning-capable model runs at `effort: low` (`params` in config). Thinking tokens
    are billed as output and counted in cost.

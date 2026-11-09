@@ -11,7 +11,7 @@
 checked: "2026-11-09"
 
 defaults:
-  temperature: 0.7          # applied only where the model accepts it (see supports_temperature)
+  temperature: null         # null = every model at its own default sampling (uniform policy; Claude 5.5 and GPT-6.1 reject the param). --temperature X overrides where accepted.
   max_tokens: 2048          # includes thinking/reasoning tokens on reasoning models
   n_seeds: 1
   chars_per_token: 3.6      # for dry-run input-token estimates (no tokenizer calls)
