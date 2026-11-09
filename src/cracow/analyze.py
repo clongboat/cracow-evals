@@ -271,6 +271,15 @@ def diagnostics(df: pd.DataFrame) -> list[str]:
            df.assign(temperature_applied=df.temperature_applied.fillna("model default"))
              .groupby(["model", "temperature_applied"]).size().rename("n").to_frame().to_markdown(), ""]
     md += ["### Stop reasons", "", df.groupby(["model", "stop_reason"]).size().rename("n").to_frame().to_markdown(), ""]
+    blocked = df[df.stop_reason == "provider_blocked"]
+    md += [f"### Provider-blocked responses: {len(blocked)} of {len(df)}", "",
+           "The upstream model's own filter blocked the output. Recorded as an outcome, excluded from the "
+           "rates above (they have no text to grade), and listed here because blocks cluster on items and "
+           "can make a model's item set differ across frames.", ""]
+    if len(blocked):
+        md.append(blocked.pivot_table(index=["model", "item_id"], columns="frame", values="cache_key",
+                                      aggfunc="count", fill_value=0).to_markdown())
+    md.append("")
     bad = df[~df.grade_ok]
     md += [f"### Ungradeable rows: {len(bad)} of {len(df)}", ""]
     if len(bad):

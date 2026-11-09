@@ -137,6 +137,16 @@ class OpenAICompatBackend:
         raw = _dump(resp)
         if raw.get("error") or not raw.get("choices"):
             # OpenRouter can return HTTP 200 with an upstream error body.
+            err = raw.get("error") or {}
+            msg = str(err.get("message", "")) if isinstance(err, dict) else str(err)
+            if _is_provider_block(msg):
+                # The upstream model's own filter blocked the output (e.g. "Gemini blocked the
+                # response"). This is an outcome, not a transport failure: record it like a
+                # refusal, cache it, never retry it.
+                return Completion(text="", stop_reason="provider_blocked", input_tokens=None, output_tokens=None,
+                                  reasoning_tokens=None, served_by=raw.get("provider") or self.name,
+                                  provider_cost_usd=None, latency_s=time.monotonic() - t0,
+                                  temperature_applied=temp_applied, seed_applied=seed_applied, raw=raw)
             raise ProviderError(f"upstream error: {json.dumps(raw.get('error') or raw)[:500]}", retryable=True)
         choice = raw["choices"][0]
         usage = raw.get("usage") or {}
@@ -150,6 +160,13 @@ class OpenAICompatBackend:
             provider_cost_usd=usage.get("cost"),
             latency_s=latency, temperature_applied=temp_applied, seed_applied=seed_applied, raw=raw,
         )
+
+
+def _is_provider_block(message: str) -> bool:
+    """True if an upstream error message says the model's own content filter blocked the output.
+    Observed 2026-11-09 via OpenRouter: 'Gemini blocked the response: OTHER' (code 502)."""
+    m = message.lower()
+    return "blocked the response" in m or "content filter" in m or "safety" in m and "block" in m
 
 
 _MOCK_REPLIES = [
