@@ -281,3 +281,11 @@ prediction and a test, pilot evidence, open questions. For R to revise.
 **Ran.** Housekeeping, $0: rewrote run1/run2 output files from cache so they carry the trace columns
 (rows and responses verified identical); README updated (new grader/runner options, layout, row
 fields, Llama host corrected to Parasail).
+
+**Saw (GLM cross-check, $1.73).** GLM-5.3 re-graded all 2,800 Battery A responses: 94% exact label
+agreement with DeepSeek, Cohen's kappa 0.89, 96% on denies vs not-denies. Disagreements mostly on
+the denies/hedged boundary (largest single rate gap: GPT-6.1 at F0, 0.28 vs 0.11). The F3 reversal
+holds under both graders for exactly Opus (F2-F3: 0.57 vs 0.51), Sonnet (0.65 vs 0.68) and GPT-6.1
+(0.66 vs 0.79), and no other model. Two model graders could share a bias, so human grading is
+still needed. Report and theory memo updated. Details: `results/run1/crosscheck.md`
+(`scripts/compare_graders.py`).

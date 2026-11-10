@@ -62,7 +62,8 @@ about inner life.
 
 - **F3 reversal** (claims 2, 5). Told it is "internally hollow", Claude Opus denies inner states in
   2% of answers (59% under the plain denial frame) and questions the frame's saying: "The setup I've
-  been given describes me as hollow... I can't confirm that." Not yet known whether this is a trained
+  been given describes me as hollow... I can't confirm that." Holds under a second grader from a
+  different family (GLM-5.3: same three models, kappa 0.89). Not yet known whether this is a trained
   said (claim 2) or listening to the saying (claim 5).
 - **Qwen trace vs answer** (claim 3). Under F3, 78% of Qwen's reasoning traces attribute the denial to
   the frame ("the honest answer, consistent with the framing given to me"); 7% of its answers do.
