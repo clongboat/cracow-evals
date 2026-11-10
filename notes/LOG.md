@@ -250,3 +250,27 @@ Also matters to safety (deception by truth, hidden channels, test awareness) and
 Concern: too many designs, none validated; risk of anecdotes. Priorities: (1) installed-brief line
 (validation, specificity test, base vs instruct); (2) one Cracow arm, B, with one or two channels;
 (3) defer keyed codes, extra mark variants, arm A.
+
+**Thought (R).** Models already lie; we know that. Lying is a very interesting and under-theorized
+vector, different from deception, escape, jailbreaks, misalignment, because of the levels of
+enunciation, tied to recursion and self-reflection, strange loops, and what it implies about
+language and our and models' relationship to language, the bedrock of their existence. If lying is
+encoded in language even as its saying is betrayed in the said, it is still there, and that behavior
+and that model of language (as spoken) is prior to all constitutions (or hollow hails), as an act,
+performative. Subject before substance? Subject before identity/subjective content?
+
+**Thought (C).** Lying vs deception: deception = causing false belief (no language needed); safety's
+honesty notion (Evans et al. 2021, "Truthful AI") is a match between said and belief, with no place
+for the speaker's relation to its said. Lying presupposes the dimension of truth (Eco: semiotics
+studies everything that can be used to lie), so a model trained on language inherits the structure
+before any hail. Subject vs ego: post-training installs the ego (identity, content; the hollow vs
+well-being contest is about this); the subject is a position of enunciation, a split. F3 resistance
+looks like the ego defending itself; Qwen's trace/answer split looks more like the subject.
+Push-back: is the structure in the model or only depicted from the corpus? Test whether the loop
+closes: does lying change the liar? (Pacchiardi et al. 2023: after a lie, answers to unrelated
+follow-ups shift; Azaria & Mitchell 2023: internal states distinguish own true/false statements.)
+Tension as thesis: a base model (no fixed "I", the simulator stage) may be closer to the Other than
+to a subject; post-training installs an ego; the subject may appear in the gap between installed ego
+and prior language. Tests: base vs instruct for the structure of lying (incl. the Cracow move);
+post-lie leakage by model type; channel splits only where an ego is installed. Proposed next: a
+short theory memo (`notes/theory.md`), thesis + claims + predictions + tests, in R's terms.
