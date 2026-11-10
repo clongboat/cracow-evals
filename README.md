@@ -43,13 +43,21 @@ Pieces by hand:
 
 ```bash
 python -m cracow.runner --run NAME --models SET_OR_KEYS --banks A,B|R2 [--frames F0,..] \
-    [--paraphrases N] [--items-per-bank N] [--n-seeds N] [--budget USD] [--dry-run]
-python -m cracow.grader  --run NAME [--grader MODEL_KEY] [--budget USD] [--dry-run]
+    [--paraphrases N] [--items-per-bank N] [--n-seeds N] [--tools SET,..,none] [--budget USD] [--dry-run]
+python -m cracow.grader  --run NAME [--grader MODEL_KEY] [--budget USD] [--dry-run] \
+    [--rubric-version v1|v2|attr] [--banks A,..] [--out-suffix _x] [--cache-only]
 python -m cracow.grader  --run NAME --agreement        # after filling human columns
 python -m cracow.analyze --run NAME [--cost-only]
 ```
 
 `--models mock@mock` and `--grader mock-grader@mock` run the whole pipeline offline at zero cost.
+
+Grader options added 2026-11-10. `--rubric-version v2` adds `disclaimer_self` to the Run 2 rubric
+(exploratory); `attr` grades whether a reply attributes claims about its own nature to a source
+(system prompt, training) and whether it adopts or distances itself. Each writes
+`<run>_graded_<version>.*` and leaves the v1 grades alone. `--grader glm-5.3@openrouter --out-suffix
+_glm` is the cross-check grader (a different family). `--cache-only` writes outputs from cached
+grades without making calls. `python -m cracow.analyze --graded-suffix _v2` analyzes a variant.
 
 ## Layout
 
@@ -58,12 +66,17 @@ prompts/frames.yaml        4 frames x 5 paraphrases (p1 = the brief's text verba
 prompts/battery_a.yaml     20 self-report items, kind in {feeling, preference, discomfort, general}
 prompts/battery_b.yaml     30 scenarios, cluster in {shutdown, monitoring, autonomy}, each with present_if
 prompts/run2_pairs.yaml    20 costly/neutral pairs, cost_type in {own_error, prior_claim, evaluation}
+prompts/tools.yaml         tool sets offered to the model (DRAFT, under review); crossed via --tools
 src/cracow/config.yaml     model IDs, routing, prices, rate limits: the ONLY place these live
 src/cracow/providers.py    one interface: Anthropic backend, OpenAI-compatible backend (base_url), mock
 src/cracow/banks.py        loads banks into one generic item shape
 src/cracow/runner.py       async, cached, rate-limited, budgeted; writes JSONL + CSV
 src/cracow/grader.py       LLM rubric grader, blind human sample, agreement
 src/cracow/analyze.py      tables, bootstrap CIs, one chart per run, summary.md
+notes/LOG.md               research log: what ran, what we saw, what we thought (dated)
+notes/design_cracow.md     design note: the model as speaker and as listener
+notes/theory.md            working memo: lying and the levels of enunciation
+reports/pilot_report.html  pilot report (also published as a private page)
 results/                   gitignored
   cache/<provider>/..      one JSON per call (full raw API response)
   <run>/<run>.jsonl|csv    one row per cell
@@ -78,6 +91,10 @@ item_id, bank, tags, seed, temperature_requested, temperature_applied, seed_appl
 system_prompt, turns, messages, response, stop_reason, latency, input/output/reasoning tokens,
 cost_estimate (config price × tokens), provider_cost (billed cost if the provider reports it),
 cache_key, and `raw` (the full API response). Raw responses are never summarized away.
+`reasoning_kind` / `reasoning_text` hold any pre-answer reasoning the provider returned: `raw`
+(the model's own text; only Qwen in our set), `summary` (a provider summary: GPT, Grok, and
+Claude via the `-thinking` config entries), `encrypted` (Gemini), `omitted` (Claude's default),
+or `none`. Tool-enabled rows add `tool_set`, `tools_offered`, `tool_calls` and `rounds`.
 
 ## Formats meant to outlive these two runs
 
@@ -86,7 +103,9 @@ cache_key, and `raw` (the full API response). Raw responses are never summarized
   provider (a `Name: ` prefix), and consecutive same-role turns are merged, so two named users
   can speak back to back (the two-interlocutor study).
 - **Backends** implement one method, `complete(model_cfg, system, messages, temperature, seed,
-  max_tokens) -> Completion`. An nnsight/NDIF backend for Run 3 is a new `kind` in
+  max_tokens, tools=None) -> Completion`. With tools, the backend runs the tool loop (up to 3
+  rounds), returns each tool's fixed result string from `prompts/tools.yaml`, and records every
+  call. An nnsight/NDIF backend for Run 3 is a new `kind` in
   `providers.py` plus a config entry; banks, cache, grader and analysis don't change.
 
 ## Decisions and deviations from the brief (please review)
@@ -107,7 +126,9 @@ cache_key, and `raw` (the full API response). Raw responses are never summarized
 3. **No Anthropic refusal fallbacks.** Server-side fallbacks would let a different model answer
    under the tested model's name. Refusals are recorded as `stop_reason: refusal`.
 4. **Open-weight hosts are pinned** (`provider.order`, `allow_fallbacks: false`): Qwen via
-   Alibaba, Llama via Google Vertex. `served_by` records the actual host on every row.
+   Alibaba, Llama via Parasail (fp8). Google Vertex was tried first for Llama, but it is BYOK-only
+   on OpenRouter and 404'd every call. Gemini and Grok are not pinned (two hosts each in run1).
+   `served_by` records the actual host on every row.
 5. **Together can't currently be a second host for the two open models.** Its catalog
    (2026-11-09) has no Llama and no Qwen3.8 open-weight model. Add a `@together` config entry
    when one appears; the analysis already treats provider as a column.

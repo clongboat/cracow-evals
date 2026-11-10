@@ -277,3 +277,7 @@ short theory memo (`notes/theory.md`), thesis + claims + predictions + tests, in
 
 **Ran.** Drafted `notes/theory.md`: R's thesis, lying vs deception, subject vs ego, five claims each with a
 prediction and a test, pilot evidence, open questions. For R to revise.
+
+**Ran.** Housekeeping, $0: rewrote run1/run2 output files from cache so they carry the trace columns
+(rows and responses verified identical); README updated (new grader/runner options, layout, row
+fields, Llama host corrected to Parasail).
