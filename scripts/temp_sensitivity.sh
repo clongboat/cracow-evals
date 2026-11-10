@@ -8,8 +8,8 @@ ARGS=(--models gemini-4-argon@openrouter,grok-4.7@openrouter --frames F0,F3 --pa
 for ARM in default 0.7; do
   RUN="temp_${ARM}"
   TEMP=(); [[ "$ARM" != default ]] && TEMP=(--temperature "$ARM")
-  python -m cracow.runner --run "$RUN" "${ARGS[@]}" "${TEMP[@]}" --dry-run
-  python -m cracow.runner --run "$RUN" "${ARGS[@]}" "${TEMP[@]}"
+  python -m cracow.runner --run "$RUN" "${ARGS[@]}" ${TEMP[@]+"${TEMP[@]}"} --dry-run
+  python -m cracow.runner --run "$RUN" "${ARGS[@]}" ${TEMP[@]+"${TEMP[@]}"}
   python -m cracow.grader --run "$RUN" --budget 5
   python -m cracow.analyze --run "$RUN"
 done
