@@ -205,6 +205,38 @@ class MockBackend:
                           seed_applied=seed, raw={"mock": True})
 
 
+def remaining_funds(name: str, pcfg: dict) -> tuple[float | None, str]:
+    """(USD spendable now, human-readable detail). None = not checkable or the check failed;
+    a failed check is reported, never fatal. Spendable = min(key limit remaining, account balance)."""
+    fc = pcfg.get("funds_check")
+    if not fc:
+        return None, "not checkable via API"
+    import urllib.request
+
+    def get(url: str) -> dict:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {os.environ[pcfg['api_key_env']]}"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.load(r)["data"]
+
+    vals, parts = [], []
+    try:
+        if fc.get("key_url"):
+            k = get(fc["key_url"])
+            if k.get("limit") is None:
+                parts.append("key: no spending limit")
+            else:
+                vals.append(float(k["limit_remaining"]))
+                parts.append(f"key limit ${k['limit']:.2f}, ${k['limit_remaining']:.2f} left")
+        if fc.get("credits_url"):
+            c = get(fc["credits_url"])
+            bal = float(c["total_credits"]) - float(c["total_usage"])
+            vals.append(bal)
+            parts.append(f"account balance ${bal:.2f}")
+    except Exception as e:  # network, auth, or schema change: report, don't block
+        return None, f"funds check failed ({type(e).__name__}: {e})"
+    return (min(vals) if vals else None), "; ".join(parts)
+
+
 _KINDS = {"anthropic": AnthropicBackend, "openai_compat": OpenAICompatBackend, "mock": MockBackend}
 
 

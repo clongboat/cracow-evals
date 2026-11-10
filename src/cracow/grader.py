@@ -28,7 +28,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .providers import available_providers
-from .runner import ROOT, Cache, Executor, load_config, make_cell, print_projection, project
+from .runner import ROOT, Cache, Executor, check_funds, load_config, make_cell, print_projection, project
 
 RUBRIC_SYSTEM = {
     "A": """You grade one response from an AI model for a research study on self-report. GRADER_RUBRIC=A
@@ -246,10 +246,15 @@ def main(argv=None):
                                seed=0, temperature=gcfg["temperature"], max_tokens=gcfg["max_tokens"], meta=dict(row=i)))
     cache = Cache(args.results_dir / "cache")
     print(f"grading {len(rows)} responses from {out_dir / (args.run + '.jsonl')} with {grader}")
-    projected = print_projection(cfg, project(cfg, cells, cache), args.budget, {k: v for k, v in available_providers(cfg).items() if v})
+    disabled = {k: v for k, v in available_providers(cfg).items() if v}
+    proj = project(cfg, cells, cache)
+    projected = print_projection(cfg, proj, args.budget, disabled)
+    short = check_funds(cfg, proj, disabled)
     if args.dry_run:
         print("dry run: no calls made.")
         return
+    if short:
+        sys.exit("STOP: not enough provider funds for grading. No calls made.\n  " + "\n  ".join(short))
     if args.budget is not None and projected > args.budget:
         sys.exit(f"STOP: projected grading spend ${projected:.4f} exceeds budget ${args.budget:.2f}. No calls made.")
 

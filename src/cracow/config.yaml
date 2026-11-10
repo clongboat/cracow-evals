@@ -36,6 +36,11 @@ providers:
     max_concurrency: 16
     extra_body:
       usage: {include: true}  # OpenRouter returns actual billed cost per call
+    # Pre-run funds check (dry-run prints it; a real run refuses if projected x margin exceeds
+    # it). A key's own spending limit can run out before the account does (run2, 2026-11-10).
+    funds_check:
+      key_url: https://openrouter.ai/api/v1/key          # data.limit_remaining (null = no key limit)
+      credits_url: https://openrouter.ai/api/v1/credits  # data.total_credits - data.total_usage
   together:
     kind: openai_compat
     base_url: https://api.together.xyz/v1

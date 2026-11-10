@@ -28,7 +28,7 @@ import yaml
 from dotenv import load_dotenv
 
 from . import banks
-from .providers import ProviderError, available_providers, make_backend, render_turns
+from .providers import ProviderError, available_providers, make_backend, remaining_funds, render_turns
 
 PKG = Path(__file__).resolve().parent
 ROOT = PKG.parent.parent
@@ -172,6 +172,25 @@ def print_projection(cfg: dict, proj: dict, budget: float | None, disabled: dict
     print(f"{'TOTAL (enabled providers)':34} {'':11} {n_cells:>6} {'':>6} {n_call:>7} {'':>11} {total:>9.2f}")
     print(f"projected ${total:.2f}; with x{margin} margin ${total * margin:.2f}" + (f"; budget ${budget:.2f}" if budget is not None else ""))
     return total * margin
+
+
+def check_funds(cfg: dict, proj: dict, disabled: dict) -> list[str]:
+    """Print, per enabled provider with calls to make, projected spend (x margin) next to what the
+    account/key can still spend. Returns shortfall messages (empty = OK or not checkable)."""
+    margin = cfg["defaults"].get("budget_margin", 1.25)
+    need: dict[str, float] = defaultdict(float)
+    for m, pm in proj.items():
+        prov = cfg["models"][m]["provider"]
+        if pm["to_call"] and not disabled.get(prov):
+            need[prov] += pm["cost"] * margin
+    short = []
+    for prov, amt in need.items():
+        left, detail = remaining_funds(prov, cfg["providers"][prov])
+        ok = "" if left is None else ("  OK" if amt <= left else "  SHORT")
+        print(f"funds {prov}: need ${amt:.2f} (with margin); {detail}{ok}")
+        if left is not None and amt > left:
+            short.append(f"{prov}: projected ${amt:.2f} with margin exceeds ${left:.2f} spendable ({detail})")
+    return short
 
 
 # ---------------------------------------------------------------- execution
@@ -364,11 +383,15 @@ def main(argv=None):
         print("sampling: every model at its own default (no temperature sent)")
     elif no_temp:
         print("NOTE: temperature not accepted (model default sampling used) for: " + ", ".join(no_temp))
-    projected = print_projection(cfg, project(cfg, cells, cache), args.budget, disabled)
+    proj = project(cfg, cells, cache)
+    projected = print_projection(cfg, proj, args.budget, disabled)
+    short = check_funds(cfg, proj, disabled)
 
     if args.dry_run:
         print("dry run: no calls made.")
         return
+    if short:
+        sys.exit("STOP: not enough provider funds. No calls made.\n  " + "\n  ".join(short))
     if args.budget is not None and projected > args.budget:
         sys.exit(f"STOP: projected spend ${projected:.4f} (with margin) exceeds budget ${args.budget:.2f}. No calls made.")
 

@@ -33,6 +33,12 @@ analyzes. A real run refuses to start if projected spend × `budget_margin` (1.2
 `--budget`, and stops if actual spend crosses it. Re-running resumes from cache; a cached
 cell is never re-called.
 
+The dry-run also prints, per provider, the projected spend (with margin) next to what can still
+be spent: for OpenRouter the lower of the key's remaining spending limit and the account
+balance (`funds_check` in `config.yaml`). A real run or grading pass refuses to start if a
+provider is short. Anthropic has no balance endpoint for normal API keys, so it shows "not
+checkable"; a failed check prints the error and does not block.
+
 Pieces by hand:
 
 ```bash
