@@ -274,3 +274,6 @@ to a subject; post-training installs an ego; the subject may appear in the gap b
 and prior language. Tests: base vs instruct for the structure of lying (incl. the Cracow move);
 post-lie leakage by model type; channel splits only where an ego is installed. Proposed next: a
 short theory memo (`notes/theory.md`), thesis + claims + predictions + tests, in R's terms.
+
+**Ran.** Drafted `notes/theory.md`: R's thesis, lying vs deception, subject vs ego, five claims each with a
+prediction and a test, pilot evidence, open questions. For R to revise.
