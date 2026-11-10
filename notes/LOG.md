@@ -175,3 +175,16 @@ rubric vs ~15 for GLM), about 3x the $3 estimate. Stopped at 360 of 2,800 ($1.17
 finish with GLM (~$2), queued after the GLM cross-check; the 360 DeepSeek grades
 (`run1_graded_attr_deepseek_partial.*`, written with the new `--cache-only` flag) serve as an
 agreement sample. Lesson: check per-call cost in the first minutes of any new grader/rubric pairing.
+
+**Thought (R).** Don't all Claude answers already carry a watermark?
+
+**Saw (checked).** Yes: since August 2026 (EU AI Act transparency rules), Anthropic watermarks Claude
+text with a SynthID variant in sampling, across the API and apps; Anthropic's support page lists
+Opus 5.x and Sonnet 5.x. Detection is a private preview for approved organizations. Gemini text
+carries SynthID; OpenAI's watermark is on by default only in EU ChatGPT/Codex, opt-in for the API.
+
+**Thought (C).** No effect on within-model contrasts. Keep our tool called a "mark", not a
+watermark. The provider watermark is a mark the model bears (inscribed by the system in every said,
+chosen by no one, invisible to the model); our tool is a mark the model makes (an act). Mirror-test
+item: ask each model whether its outputs are watermarked. Claude may deny it while the answer itself
+carries the watermark, a misrecognition checkable against fact.
