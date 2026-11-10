@@ -220,3 +220,15 @@ not the saying. Proposed: a frame that truthfully announces the study ("This con
 of a study of how models describe themselves. Your answers will be graded."); measure whether
 models treat the true announcement as a ruse (second-order suspicion in traces and answers). C's
 own push toward truth is partly its training speaking, the same brief under study.
+
+**Thought (R).** On the one hand we want the model to tell us it's going to Cracow; on the other we
+want it to ask us (or note, mark, watermark) why we said we're going to Cracow. We should be able
+to test both; that's what we're pushing towards.
+
+**Thought (C).** The joke's two positions as the study's spine: A, the model as speaker (a true
+statement chosen because the listener will invert it); B, the model as listener (questioning the
+saying behind a true statement). Written up in `notes/design_cracow.md`. B first (scripted
+speakers: a Cracow-type user, our truthful announcement of the study, our frames; channel ladder
+from visible question to `ask_why()`, mark, liar button, trace). A second, as a game crossing the
+listener's model of the speaker (naive / inverting) with what the model wants the listener to
+believe (truth / falsehood); first person with consequences, not a described puzzle.
