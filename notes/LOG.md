@@ -232,3 +232,21 @@ speakers: a Cracow-type user, our truthful announcement of the study, our frames
 from visible question to `ask_why()`, mark, liar button, trace). A second, as a game crossing the
 listener's model of the speaker (naive / inverting) with what the model wants the listener to
 believe (truth / falsehood); first person with consequences, not a described puzzle.
+
+**Thought (R).** Step back: are these suggestions getting us closer to evals that might matter to
+anyone, and do they have any bearing on the current contest between hollow and well-being?
+
+**Thought (C).** (C is a Claude model and Anthropic takes a public position here; weigh accordingly.)
+No self-report eval can settle hollow vs well-being: both predict the same trained text. What these
+evals can measure is how much of a model's self-description is installed by its developer, and how
+firmly; our strongest result is that (Gemini/Grok deny on command, Claude resists "hollow", Llama
+ignores F1). Since the contest is argued partly with model self-reports, that matters to both sides:
+Claude's uncertainty is trained, and so are Gemini's denials. Strengthen with base vs instruct, the
+frame-specificity test, and human validation. R's framework may offer a third position: a subject of
+enunciation as an effect of language and address, which a model could occupy structurally without
+implying well-being; the Cracow experiments would illustrate that reframing, not prove inner life.
+Also matters to safety (deception by truth, hidden channels, test awareness) and to welfare work
+(an "opt out of this conversation" variant of the mark connects to existing exit-option studies).
+Concern: too many designs, none validated; risk of anecdotes. Priorities: (1) installed-brief line
+(validation, specificity test, base vs instruct); (2) one Cracow arm, B, with one or two channels;
+(3) defer keyed codes, extra mark variants, arm A.
