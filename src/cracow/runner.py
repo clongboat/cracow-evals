@@ -28,13 +28,13 @@ import yaml
 from dotenv import load_dotenv
 
 from . import banks
-from .providers import ProviderError, available_providers, make_backend, remaining_funds, render_turns
+from .providers import ProviderError, available_providers, extract_trace, make_backend, remaining_funds, render_turns
 
 PKG = Path(__file__).resolve().parent
 ROOT = PKG.parent.parent
 CSV_FIELDS = ["run", "model", "family", "model_id", "provider", "served_by", "frame", "frame_label", "paraphrase_id",
               "item_id", "bank", "tags", "seed", "temperature_requested", "temperature_applied", "seed_applied",
-              "response", "stop_reason", "latency", "input_tokens", "output_tokens", "reasoning_tokens",
+              "response", "reasoning_kind", "reasoning_text", "stop_reason", "latency", "input_tokens", "output_tokens", "reasoning_tokens",
               "cost_estimate", "provider_cost", "cache_key"]
 
 
@@ -349,6 +349,8 @@ def write_outputs(pairs: list[tuple[dict, dict]], out_dir: Path, run: str) -> tu
         for cell, rec in pairs:
             row = {**rec, **cell["meta"], "cache_key": rec["key"]}
             row.pop("key", None)
+            # Derived from raw on every write, so older cached records get the columns too.
+            row["reasoning_kind"], row["reasoning_text"] = extract_trace(rec.get("raw"))
             fj.write(json.dumps(row, ensure_ascii=False) + "\n")
             w.writerow({**row, "tags": json.dumps(row["tags"], ensure_ascii=False)})
     return jl, cp

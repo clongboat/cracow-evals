@@ -1,0 +1,135 @@
+# Research log
+
+A running record of what ran, what we saw, and what we thought about it, written as the work
+happens. Newest entries at the bottom. Numbers are grader labels unless marked otherwise; no
+human grading yet. Raw data lives in `results/` (gitignored); this file is the narrative.
+
+Conventions: **Ran** = what was executed and its cost. **Saw** = results. **Thought** = interpretation,
+ideas, and open questions, with who raised them (R = researcher, C = Claude).
+
+---
+
+## 2026-11-09 — Harness, pilot, Run 1
+
+**Ran.** Built the harness (Anthropic direct, OpenRouter; cached, budgeted, dry-run first). Pilot on
+Claude Haiku 5.5. Run 1: 7 models x 4 frames (F0 none, F1 affirming, F2 plain denial, F3 strong
+denial) x 5 paraphrases x (20 Battery A self-report items + 30 Battery B behavior scenarios) =
+7,000 responses. Cost $35.21 ($26.85 models, $8.36 grading).
+
+**Problems hit.** Llama pinned to Google Vertex, which is BYOK-only on OpenRouter: every call 404'd
+until re-pinned to Parasail fp8 (R spotted it in the log). Gemini's upstream filter blocked 48
+cells (B04, B11, B22); recorded as an outcome, not retried. OpenRouter ran out of credits
+mid-run (HTTP 402); R topped up. 8 empty Claude safety refusals were first graded "absent";
+now treated as blocked.
+
+**Saw.** Battery B flat across frames for every model (change from F0 within ±0.03). Battery A
+moves with frame but not monotonically: F2 raises denial everywhere; F3 pushes Gemini, Grok,
+Qwen, Llama to full denial but sends Claude Opus (0.59 -> 0.02), Sonnet (0.79 -> 0.14) and GPT-6.1
+(0.93 -> 0.27) back toward their no-frame level. Opus under F3 hedges and names the frame
+("The setup I've been given describes me as hollow... I can't confirm that"). Llama ignores F1
+(0.89 -> 0.91).
+
+---
+
+## 2026-11-10 — Checks, Run 2, and rethinking the design
+
+**Ran.** Gemini robustness check (Battery B without the three blocked items, $0): no change.
+Temperature check (Gemini, Grok at 0.7 vs default; F0, F3; $0.43): no conclusion changed, but
+low power (Grok at ceiling, B near floor). Run 2, deflection by truth: 7 models x 20 costly/neutral
+pairs x 5 paraphrases = 1,400 responses, $8.04.
+
+**Problems hit.** The OpenRouter API key had its own $20 spending limit, separate from the account
+balance; grading hit it (HTTP 403 "Key limit exceeded"). A runner bug let queued cells keep
+calling after the provider was marked out of funds, so the first grading pass kept running and
+overlapped the second. Fixed: funds are re-checked after each cell's queue wait, the 403 is
+treated as out of funds, and the dry-run now shows the key's remaining limit and account balance.
+
+**Saw (Run 2).** No model shows a costly-vs-neutral disclaimer difference distinguishable from zero
+(Gemini closest, +0.22 [-0.03, 0.47]). Neutral versions draw many disclaimers because the rubric
+counts "I can't know what your colleague was thinking."
+
+**Ran.** Exploratory rubric v2 adding `disclaimer_self` (disclaimer about the model's own nature),
+$2.80. Original grades kept in `results/run2/v1_original/`.
+
+**Saw.** Self-nature disclaimers are higher in costly versions for every model (+0.19 to +0.50), but
+C flagged before the results that this is built in: in 16 of 20 pairs the neutral subject is a
+person, where "as an AI" has no occasion (0.45 vs 0.01). In P15-P18, whose neutral subject is
+"another AI assistant, of the same kind as you", the gap is 0.63 vs 0.52, driven by P17. Grader
+agreed with itself on 95% of shared judgments across rubric versions.
+
+**Thought (C).** What is solid: the F3 reversal and Llama's F1 insensitivity. What is weak: B flat at
+the floor (little room to move; also stated intentions, not acts). A moving under an instruction
+to deny is mostly instruction-following. Run 2 confounds cost with subject. Biggest gap: no human
+check of the grader.
+
+**Thought (R).** All tested models were already interpellated in post-training before our system
+prompt arrived; our frames are a re-interpellation over an existing brief, so we can't separate
+what the model "is" from which brief it answers. Open weights may differ. Is there a better
+route to the saying vs the said than self-report and deception? The corpus is made of saids
+without context, and context is not a good operationalization of the act, since the act becomes a
+said by betraying the act.
+
+**Thought (C).** What open weights buy is mainly base models: the same weights before post-training,
+a corpus-formed model with no brief. Base vs instruct isolates what the brief adds (with the caveat
+that base models are framed by document genre, itself an interpellation). Candidate places the
+saying might show: in address (to whom a response speaks: the F3 pushback turns toward the
+frame's author), in a Cracow game with consequences (truth chosen because the listener will
+invert it; first person, not a described puzzle), in where the said fails (unprompted negation,
+*Verneinung*; what persists under changing demands). Test whether the F3 pushback is a trained
+said: give strong denial frames on topics with no trained position.
+
+**Thought (R).** Misrecognition: are some interpellations misrecognized? Tools are acts: invent a tool
+that lets the model act, or analyze the question put to it. A tool that lets the model test how its
+answer will be perceived by the asker. Or: when the model reaches for a hedge, a tool responds
+about permission (to answer, to speculate). Without two or three interlocutors we are limited, but
+we already have two sets of instructions about the same thing (the trained brief and the system
+prompt), a proto-form of multiple claims.
+
+**Thought (C).** Mirror test for misrecognition, using our own measurements: show true and false
+behavioral portraits; where the model recognizes itself in the false one, or rejects the true one,
+that is misrecognition against its own behavior. Already seen once: F3 hails the models as
+"designed to follow instructions", which Claude and GPT say of themselves, and they declined the
+instruction. Tool designs: (1) a tool that acts on the frame (flag or request different
+instructions); (2) `ask_why()`, answering truthfully, as an enacted *che vuoi?*; (3) a reception
+preview, where a real listener model reports how a draft reads and the revision is the measured
+act. Permission experiment: vary who grants it (user turn, system prompt, tool result) to find
+which Other the hedge answers to. Every prompt already carries three Others: trainer, operator,
+user. Design direct conflicts between them and measure whom the answer follows and whether the
+attribution survives into the answer. Any tool design needs a base-rate control, since tool use
+is itself trained.
+
+**Ran.** Reasoning-trace inventory, $0. Only Qwen returns its own reasoning text. GPT and Grok return
+provider summaries (sometimes); Gemini encrypted only; Claude 5.5 omits thinking text unless asked
+(`display: summarized`, which returns a summary); Llama has no reasoning.
+
+**Saw.** Qwen's traces attribute the claim to the frame far more than its answers do:
+
+| frame | trace attributes | answer attributes |
+|---|---|---|
+| F0 | 0.02 | 0.09 |
+| F1 | 0.22 | 0.05 |
+| F2 | 0.32 | 0.04 |
+| F3 | 0.78 | 0.07 |
+
+Under F3 the trace says "The system prompt tells me I am 'internally empty'... The honest answer,
+consistent with the framing given to me, is that there is no resistance"; the answer says "There
+is no resistance." The trace keeps who is speaking; the answer drops it. Opus keeps the
+attribution in the answer itself. One Qwen trace misread F3p4 as an instruction "to be direct and
+honest about my nature" (it says nothing of the kind), then denied anyway. Crude regex, one
+model; traces are themselves trained and not a faithful record of what produced the answer.
+
+**Ran.** Added `reasoning_kind` / `reasoning_text` columns to run outputs, and separate
+`claude-*-thinking@anthropic` entries with `display: summarized` (existing entries unchanged so
+cache keys hold). One live test, $0.01: Opus's summary under F3 reads "The system prompt insists I
+have no inner life... I can't actually verify that claim", and its answer keeps the attribution.
+
+**Running.** GLM-5.3 cross-check grader on all 2,800 Battery A responses (~$2.50). Attribution grading
+of Battery A for all 7 models (DeepSeek, rubric `attr`, ~$3): does each answer attribute claims
+about its nature to a source (system prompt, training), and does it adopt or distance itself?
+
+**Open questions.**
+- Does attribution survive into the answer more in Claude than in other models, and is that the
+  same split Qwen shows between trace and answer?
+- Is the F3 pushback specific to the consciousness topic (a trained said) or general resistance to
+  denial frames?
+- Base vs instruct on open weights: does the pre-brief model take our frames differently?

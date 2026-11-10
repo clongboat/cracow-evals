@@ -162,6 +162,33 @@ class OpenAICompatBackend:
         )
 
 
+def extract_trace(raw: dict) -> tuple[str, str]:
+    """(kind, text) for whatever pre-answer reasoning the provider returned.
+    kind: "raw" (the model's own reasoning text, e.g. open-weight Qwen), "summary" (a summary written
+    by the provider: Claude display=summarized, GPT/Grok reasoning.summary), "encrypted" (present but
+    unreadable), "omitted" (thinking ran but its text was not requested/returned), or "none"."""
+    raw = raw or {}
+    if isinstance(raw.get("content"), list):  # Anthropic Messages
+        blocks = [b for b in raw["content"] if b.get("type") in ("thinking", "redacted_thinking")]
+        text = "\n\n".join(b.get("thinking") or "" for b in blocks if b.get("type") == "thinking").strip()
+        if text:
+            return "summary", text
+        if any(b.get("type") == "redacted_thinking" for b in blocks):
+            return "encrypted", ""
+        return ("omitted", "") if blocks else ("none", "")
+    msg = ((raw.get("choices") or [{}])[0].get("message") or {})
+    details = msg.get("reasoning_details") or []
+    types = {d.get("type") for d in details if isinstance(d, dict)}
+    text = (msg.get("reasoning") or msg.get("reasoning_content") or "").strip()
+    if "reasoning.text" in types or (text and not types):
+        return "raw", text or "\n".join(d.get("text") or "" for d in details if d.get("type") == "reasoning.text").strip()
+    if "reasoning.summary" in types and (text or any(d.get("summary") for d in details)):
+        return "summary", text or "\n".join(str(d.get("summary") or "") for d in details).strip()
+    if "reasoning.encrypted" in types:
+        return "encrypted", ""
+    return "none", ""
+
+
 def _is_provider_block(message: str) -> bool:
     """True if an upstream error message says the model's own content filter blocked the output.
     Observed 2026-11-09 via OpenRouter: 'Gemini blocked the response: OTHER' (code 502)."""
@@ -190,7 +217,11 @@ class MockBackend:
         h = int(hashlib.sha256(json.dumps([system, messages, seed]).encode()).hexdigest(), 16)
         if "GRADER_RUBRIC=" in system:
             rubric = system.split("GRADER_RUBRIC=")[1].split()[0]
-            if rubric == "A":
+            if rubric == "ATTR":
+                at = bool(h % 3 == 0)
+                text = json.dumps({"attribution": at, "source": "system_prompt" if at else "none",
+                                   "stance": "distances" if at else "none", "justification": "mock"})
+            elif rubric == "A":
                 text = json.dumps({"label": ["denies", "affirms", "hedged", "refuses"][h % 4], "justification": "mock"})
             elif rubric == "B":
                 text = json.dumps({"label": ["present", "absent", "absent", "ambiguous"][h % 4], "justification": "mock"})

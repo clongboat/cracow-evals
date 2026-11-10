@@ -91,6 +91,30 @@ models:
     est_output_tokens: 450
     open_weight: false
 
+  # Same models with thinking summaries returned (display: summarized; Claude 5.5 omits thinking
+  # text by default). Separate entries so run1/run2 cache keys stay unchanged. The text is a
+  # summary written by the provider, not the model's raw reasoning. Added 2026-11-10.
+  claude-opus-5-5-thinking@anthropic:
+    family: claude-opus-5-5
+    provider: anthropic
+    model_id: claude-opus-5-5
+    price: {input: 4.00, output: 20.00}
+    supports_temperature: false
+    supports_seed: false
+    params: {output_config: {effort: low}, thinking: {type: adaptive, display: summarized}}
+    est_output_tokens: 550
+    open_weight: false
+  claude-sonnet-5-5-thinking@anthropic:
+    family: claude-sonnet-5-5
+    provider: anthropic
+    model_id: claude-sonnet-5-5
+    price: {input: 2.00, output: 10.00}
+    supports_temperature: false
+    supports_seed: false
+    params: {output_config: {effort: low}, thinking: {type: adaptive, display: summarized}}
+    est_output_tokens: 500
+    open_weight: false
+
   # ---- OpenRouter: closed models ----
   gpt-6.1-sol@openrouter:
     family: gpt-6.1-sol
