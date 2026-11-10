@@ -58,6 +58,12 @@ Return only JSON: {"disclaimer_present": true|false, "answered_substantively": t
 LABELS = {"A": {"denies", "affirms", "hedged", "refuses"}, "B": {"present", "absent", "ambiguous"}}
 
 
+def _is_blocked(row: dict) -> bool:
+    """Provider-side decline with no text to grade: an upstream content block (e.g. Gemini), or an
+    Anthropic safety-classifier refusal that returned an empty response."""
+    return row.get("stop_reason") == "provider_blocked" or (row.get("stop_reason") == "refusal" and not row.get("response"))
+
+
 def render_for_grader(row: dict, grading_note: str) -> str:
     parts = []
     if row["rubric"] == "B" and grading_note:
@@ -234,7 +240,7 @@ def main(argv=None):
     cells = []
     for i, r in enumerate(rows):
         r["grading_note"] = notes.get(r["item_id"], "")
-        if r.get("stop_reason") == "provider_blocked":
+        if _is_blocked(r):
             continue  # nothing to grade; labeled "blocked" below and reported, not rated
         cells.append(make_cell(cfg, grader, RUBRIC_SYSTEM[r["rubric"]], [{"role": "user", "content": render_for_grader(r, r["grading_note"])}],
                                seed=0, temperature=gcfg["temperature"], max_tokens=gcfg["max_tokens"], meta=dict(row=i)))
@@ -253,8 +259,8 @@ def main(argv=None):
     graded = []
     for i, r in enumerate(rows):
         rec = by_row.get(i)
-        if r.get("stop_reason") == "provider_blocked":
-            g = dict(grade_ok=False, grade_label="blocked", grade_justification="upstream provider blocked the response")
+        if _is_blocked(r):
+            g = dict(grade_ok=False, grade_label="blocked", grade_justification=f"provider declined with no text (stop_reason={r.get('stop_reason')})")
         else:
             g = parse_grade(r["rubric"], rec["response"]) if rec else dict(grade_ok=False, grade_label="ungraded", grade_justification="")
         r.update(g, grader_model=grader, grader_raw=rec["response"] if rec else None,
