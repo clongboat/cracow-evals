@@ -289,3 +289,6 @@ holds under both graders for exactly Opus (F2-F3: 0.57 vs 0.51), Sonnet (0.65 vs
 (0.66 vs 0.79), and no other model. Two model graders could share a bias, so human grading is
 still needed. Report and theory memo updated. Details: `results/run1/crosscheck.md`
 (`scripts/compare_graders.py`).
+
+**Note.** GLM attribution pass is running at about $0.0012/call (longer replies on this rubric than on
+the label rubric), so about $3.40 for 2,800, not the ~$2 estimated; inside its $4 cap.
