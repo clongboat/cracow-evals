@@ -267,17 +267,24 @@ class Executor:
             try:
                 # Model limiter first, so cells waiting on a slow model don't hold provider slots.
                 async with (model_limiter or contextlib.nullcontext()), prov_limiter:
+                    # Re-check after the wait: every cell is queued at once, so a provider disabled
+                    # (or a budget crossed) while this cell waited must stop it here, not only at entry.
+                    if self.disabled.get(prov):
+                        return None
+                    if self.budget is not None and self.spent >= self.budget:
+                        raise BudgetExceeded
                     comp = await backend.complete(mcfg, cell["system"], cell["messages"], cell["temperature"],
                                                   cell["seed"], cell["max_tokens"])
                 break
             except ProviderError as e:
-                if e.status == 402:
-                    # Out of credits: every further call to this provider will fail too. Stop
-                    # calling it for the rest of this invocation; rerun after topping up.
+                if _is_funds_error(e):
+                    # Out of credits, or the API key's spending limit is reached: every further call
+                    # to this provider will fail too. Stop calling it for the rest of this
+                    # invocation; rerun after topping up / raising the limit.
                     if not self.disabled.get(prov):
-                        self.disabled[prov] = "out of credits (HTTP 402)"
+                        self.disabled[prov] = f"out of funds (HTTP {e.status})"
                         self.runtime_disabled.add(prov)
-                        print(f"  !! {prov}: out of credits (HTTP 402); skipping its remaining cells", flush=True)
+                        print(f"  !! {prov}: out of funds (HTTP {e.status}: {str(e)[:120]}); skipping its remaining cells", flush=True)
                     self._log_failure(cell, str(e), attempt, e.status)
                     return None
                 if not e.retryable or attempt == self.max_attempts:
@@ -321,6 +328,12 @@ class Executor:
 
         await asyncio.gather(*(one(i, c) for i, c in enumerate(cells)))
         return [(c, r) for c, r in zip(cells, results) if r is not None], stopped
+
+
+def _is_funds_error(e: ProviderError) -> bool:
+    """402 = account out of credits. OpenRouter returns 403 'Key limit exceeded' when the API key's
+    own spending limit is reached (observed 2026-11-10)."""
+    return e.status == 402 or (e.status == 403 and "limit exceeded" in str(e).lower())
 
 
 def _now() -> str:
@@ -405,7 +418,7 @@ def main(argv=None):
     if ex.n_failed:
         print(f"failures logged to {ex.failures_path}")
     if ex.runtime_disabled:
-        sys.exit(f"STOPPED: out of credits on {', '.join(sorted(ex.runtime_disabled))}; top up and rerun to resume from cache.")
+        sys.exit(f"STOPPED: out of funds (credits or key limit) on {', '.join(sorted(ex.runtime_disabled))}; top up and rerun to resume from cache.")
     if stopped:
         sys.exit(f"STOPPED: actual spend reached budget ${args.budget:.2f}; rerun to resume from cache.")
 

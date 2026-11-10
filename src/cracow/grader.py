@@ -294,7 +294,7 @@ def main(argv=None):
     print(f"wrote {jl}\nwrote {cp}")
     export_human_sample([r for r in graded if r["grade_label"] != "blocked"], out_dir, args.sample_frac, args.sample_seed, args.force_sample)
     if ex.runtime_disabled:
-        sys.exit(f"STOPPED: out of credits on {', '.join(sorted(ex.runtime_disabled))}; top up and rerun to resume from cache.")
+        sys.exit(f"STOPPED: out of funds (credits or key limit) on {', '.join(sorted(ex.runtime_disabled))}; top up and rerun to resume from cache.")
     if stopped:
         sys.exit("STOPPED: grader budget reached; rerun to resume from cache.")
 
