@@ -176,6 +176,19 @@ models:
     est_output_tokens: 250
     open_weight: true
 
+  # ---- second grader (cross-check only; different family from every model under test) ----
+  glm-5.3@openrouter:
+    family: glm-5.3
+    provider: openrouter
+    model_id: z-ai/glm-5.3
+    # Checked 2026-11-10: 47 OpenRouter hosts, fp4 to fp8. Pinned to Z.AI's own endpoint (fp8).
+    price: {input: 1.40, output: 4.40}   # Z.AI endpoint price via OpenRouter
+    supports_temperature: true
+    supports_seed: true
+    params: {extra_body: {reasoning: {effort: low}, provider: {order: [z-ai/fp8], allow_fallbacks: false}}}
+    est_output_tokens: 250
+    open_weight: null                    # not verified for 5.3
+
   # ---- offline ----
   mock@mock:
     family: mock

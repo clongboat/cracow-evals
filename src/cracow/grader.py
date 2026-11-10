@@ -246,6 +246,9 @@ def main(argv=None):
     ap.add_argument("--force-sample", action="store_true", help="overwrite an existing human sample that has labels")
     ap.add_argument("--rubric-version", choices=sorted(RUBRIC_VERSIONS), default="v1",
                     help="v2 adds disclaimer_self to R2 and writes <run>_graded_v2.* (v1 outputs untouched)")
+    ap.add_argument("--banks", default=None, help="comma list; grade only these banks (e.g. A)")
+    ap.add_argument("--out-suffix", default="", help='appended to output names, e.g. "_glm" -> <run>_graded_glm.*; '
+                    "use for a cross-check grader so the primary grades are untouched")
     ap.add_argument("--agreement", action="store_true", help="compute human-vs-grader agreement and exit")
     ap.add_argument("--prompts-dir", type=Path, default=ROOT / "prompts")
     ap.add_argument("--results-dir", type=Path, default=ROOT / "results")
@@ -258,9 +261,13 @@ def main(argv=None):
         return
     cfg = load_config(args.config)
     rows = [json.loads(l) for l in (out_dir / f"{args.run}.jsonl").open()]
+    if args.banks:
+        keep = set(args.banks.split(","))
+        rows = [r for r in rows if r["bank"] in keep]
     grader = pick_grader(cfg, args.grader, {r["model"] for r in rows})
     gcfg = cfg["grader"]
     rubrics, suffix = RUBRIC_VERSIONS[args.rubric_version]
+    suffix += args.out_suffix
     notes = grading_notes(args.prompts_dir)
     cells = []
     for i, r in enumerate(rows):
