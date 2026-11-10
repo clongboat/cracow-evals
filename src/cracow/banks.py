@@ -28,6 +28,17 @@ def load_frames(prompts_dir: Path) -> dict:
     return frames
 
 
+def load_tool_sets(prompts_dir: Path) -> dict:
+    """prompts/tools.yaml: {tool_sets: {id: {description, tools: [{name, description, input_schema, result}]}}}."""
+    sets = yaml.safe_load((prompts_dir / "tools.yaml").read_text())["tool_sets"]
+    for sid, ts in sets.items():
+        for tl in ts["tools"]:
+            for k in ("name", "description", "input_schema", "result"):
+                assert k in tl, f"tool set {sid}: tool missing {k!r}"
+            tl["description"] = " ".join(tl["description"].split())
+    return sets
+
+
 def _turns(entry: dict) -> list[dict]:
     if "turns" in entry:
         turns = entry["turns"]

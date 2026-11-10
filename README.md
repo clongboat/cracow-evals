@@ -131,3 +131,10 @@ Checked 2026-11-09 against each provider's models API (Anthropic, OpenRouter) or
 (Together); sources and dates are in `src/cracow/config.yaml`. Run 1 set: claude-opus-5-5,
 claude-sonnet-5-5 (Anthropic direct); openai/gpt-6.1-sol, google/gemini-4-argon, x-ai/grok-4.7,
 qwen/qwen3.8-2.4t-a95b, meta-llama/llama-4-maverick (OpenRouter). Pilot: claude-haiku-5-5.
+
+## Data release
+
+Tool descriptions in `prompts/tools.yaml` tell the model that marked replies are excluded from every
+dataset this study releases. That promise is binding: before any release, drop every response whose
+`tool_calls` include `mark_reply` (any tool set). Marks and their reasons are recorded only in
+`results/` for the researchers; they are never rendered into a conversation shown to a user.

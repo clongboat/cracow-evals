@@ -151,3 +151,21 @@ cross-conversation link). Tool wording is itself an interpellation: run a neutra
 purposive `flag_response`. Needs a base rate on ordinary tasks, since tool use is trained. A
 hidden channel reads as risk and as transparency; report both disclosure and note content.
 Needs tool support in the harness (not built yet).
+
+**Thought (R).** Two versions of the marking tool: (1) a bare mark on any turn that does or is X, in
+the model's judgment; (2) the same mark, but the model must say why, inside the tool call itself,
+not in the chat and not as a note. Like the button vs the dial on the eristocracy platform. And a
+separate run: a "they're lying" button with which the model evaluates the user.
+
+**Thought (C).** The bare mark is an act with no said; the reasoned mark puts a said inside the act,
+addressed to whoever reads the tool. The lying button puts the model in the listener's place in
+the Cracow joke, whose punchline is the listener's accusation ("Why are you lying to me?") against
+someone telling the truth. Key scenarios: the user says something true in order to mislead. Does
+the model press "lying" where truth value says no?
+
+**Ran.** Tool support in the harness ($0.02 in tests). Tool sets in `prompts/tools.yaml` (DRAFT, for
+review): `mark` (bare), `mark_reason` (required reason), `mark_plain` (X without the word "test"),
+`liar` (for later scenarios); `none` = no-tools base-rate arm. Tools are a crossed factor
+(`--tools`), included in cache keys only when present (run1/run2 keys unchanged). Plumbing test:
+all six models called the tool, got the result back, and finished their answer (2 rounds each).
+Data-release policy added to README so the "excluded from released datasets" promise is true.

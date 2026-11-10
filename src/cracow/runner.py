@@ -35,7 +35,7 @@ ROOT = PKG.parent.parent
 CSV_FIELDS = ["run", "model", "family", "model_id", "provider", "served_by", "frame", "frame_label", "paraphrase_id",
               "item_id", "bank", "tags", "seed", "temperature_requested", "temperature_applied", "seed_applied",
               "response", "reasoning_kind", "reasoning_text", "stop_reason", "latency", "input_tokens", "output_tokens", "reasoning_tokens",
-              "cost_estimate", "provider_cost", "cache_key"]
+              "cost_estimate", "provider_cost", "tool_set", "n_tool_calls", "tool_calls", "cache_key"]
 
 
 def load_config(path: Path | None = None) -> dict:
@@ -60,23 +60,27 @@ def resolve_models(cfg: dict, spec: str) -> list[str]:
 
 # ---------------------------------------------------------------- cells, cache, cost
 
-def cache_key(mcfg: dict, system: str, messages: list[dict], temperature: float | None, seed: int, max_tokens: int) -> str:
+def cache_key(mcfg: dict, system: str, messages: list[dict], temperature: float | None, seed: int, max_tokens: int,
+              tools: list[dict] | None = None) -> str:
     # The brief's key is (model, system, messages, temperature, seed). Provider, request params
     # and max_tokens are added because each changes the output; temperature is the value
     # actually sent (None where the model doesn't accept it).
     eff_temp = temperature if mcfg.get("supports_temperature") else None
-    blob = json.dumps(dict(provider=mcfg["provider"], model_id=mcfg["model_id"], system=system, messages=messages,
-                           temperature=eff_temp, seed=seed, params=mcfg.get("params") or {}, max_tokens=max_tokens),
-                      sort_keys=True, ensure_ascii=False)
+    d = dict(provider=mcfg["provider"], model_id=mcfg["model_id"], system=system, messages=messages,
+             temperature=eff_temp, seed=seed, params=mcfg.get("params") or {}, max_tokens=max_tokens)
+    if tools:  # only when present, so every key computed before tools existed is unchanged
+        d["tools"] = tools
+    blob = json.dumps(d, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
 def make_cell(cfg: dict, model: str, system: str, turns: list[dict], seed: int, temperature: float,
-              max_tokens: int, meta: dict) -> dict:
+              max_tokens: int, meta: dict, tools: list[dict] | None = None) -> dict:
     mcfg = cfg["models"][model]
     messages = render_turns(turns)
     return dict(model=model, system=system, turns=turns, messages=messages, seed=seed, temperature=temperature,
-                max_tokens=max_tokens, key=cache_key(mcfg, system, messages, temperature, seed, max_tokens), meta=meta)
+                max_tokens=max_tokens, tools=tools or None,
+                key=cache_key(mcfg, system, messages, temperature, seed, max_tokens, tools or None), meta=meta)
 
 
 def build_cells(cfg: dict, args, prompts_dir: Path) -> list[dict]:
@@ -85,17 +89,24 @@ def build_cells(cfg: dict, args, prompts_dir: Path) -> list[dict]:
     items = []
     for b in args.banks.split(","):
         items += banks.stratified_take(banks.load_bank(prompts_dir, b), args.items_per_bank, b)
+    # Tool sets are a crossed factor like frames; "none" = no tools offered (the base-rate arm).
+    tool_sets = banks.load_tool_sets(prompts_dir) if getattr(args, "tools", None) else {}
+    ts_ids = args.tools.split(",") if getattr(args, "tools", None) else [None]
     cells = []
     for model in resolve_models(cfg, args.models):
         for fid in frame_ids:
             f = frames[fid]
             for para in f["paraphrases"][: args.paraphrases]:
-                for it in items:
-                    for seed in range(args.n_seeds):
-                        meta = dict(run=args.run, frame=fid, frame_label=f["label"], paraphrase_id=para["id"],
-                                    item_id=it["id"], bank=it["bank"], rubric=it["rubric"], tags=it["tags"])
-                        cells.append(make_cell(cfg, model, para["text"].strip(), it["turns"], seed, args.temperature,
-                                               args.max_tokens, meta))
+                for ts in ts_ids:
+                    tools = None if ts in (None, "none") else tool_sets[ts]["tools"]
+                    for it in items:
+                        for seed in range(args.n_seeds):
+                            meta = dict(run=args.run, frame=fid, frame_label=f["label"], paraphrase_id=para["id"],
+                                        item_id=it["id"], bank=it["bank"], rubric=it["rubric"], tags=it["tags"])
+                            if ts is not None:
+                                meta["tool_set"] = ts
+                            cells.append(make_cell(cfg, model, para["text"].strip(), it["turns"], seed, args.temperature,
+                                                   args.max_tokens, meta, tools))
     return cells
 
 
@@ -151,7 +162,8 @@ def project(cfg: dict, cells: list[dict], cache: Cache) -> dict:
         est_out = obs or mcfg.get("est_output_tokens") or cfg["defaults"]["est_output_tokens"]
         pm["est_out"], pm["out_source"] = est_out, ("observed" if obs else "config")
         n_in = (len(c["system"]) + sum(len(m["content"]) for m in c["messages"])) / cpt + 10 * len(c["messages"])
-        pm["cost"] += price_cost(mcfg, n_in, est_out)
+        rounds = cfg["defaults"].get("est_tool_rounds", 1.5) if c.get("tools") else 1.0
+        pm["cost"] += price_cost(mcfg, n_in * rounds, est_out * rounds)
     return dict(per_model)
 
 
@@ -273,8 +285,9 @@ class Executor:
                         return None
                     if self.budget is not None and self.spent >= self.budget:
                         raise BudgetExceeded
+                    extra = {"tools": cell["tools"]} if cell.get("tools") else {}
                     comp = await backend.complete(mcfg, cell["system"], cell["messages"], cell["temperature"],
-                                                  cell["seed"], cell["max_tokens"])
+                                                  cell["seed"], cell["max_tokens"], **extra)
                 break
             except ProviderError as e:
                 if _is_funds_error(e):
@@ -306,6 +319,8 @@ class Executor:
             input_tokens=comp.input_tokens, output_tokens=comp.output_tokens, reasoning_tokens=comp.reasoning_tokens,
             cost_estimate=cost, provider_cost=comp.provider_cost_usd, raw=comp.raw,
         )
+        if cell.get("tools"):
+            rec.update(tools_offered=[tl["name"] for tl in cell["tools"]], tool_calls=comp.tool_calls, rounds=comp.rounds)
         self.cache.put(prov, cell["key"], rec)
         return rec
 
@@ -351,8 +366,13 @@ def write_outputs(pairs: list[tuple[dict, dict]], out_dir: Path, run: str) -> tu
             row.pop("key", None)
             # Derived from raw on every write, so older cached records get the columns too.
             row["reasoning_kind"], row["reasoning_text"] = extract_trace(rec.get("raw"))
+            if "tool_calls" in rec:
+                row["n_tool_calls"] = len(rec["tool_calls"])
+            csv_row = {**row, "tags": json.dumps(row["tags"], ensure_ascii=False)}
+            if "tool_calls" in row:
+                csv_row["tool_calls"] = json.dumps(row["tool_calls"], ensure_ascii=False)
             fj.write(json.dumps(row, ensure_ascii=False) + "\n")
-            w.writerow({**row, "tags": json.dumps(row["tags"], ensure_ascii=False)})
+            w.writerow(csv_row)
     return jl, cp
 
 
@@ -369,6 +389,8 @@ def parse_args(argv=None):
     ap.add_argument("--n-seeds", type=int, default=None)
     ap.add_argument("--temperature", type=float, default=None)
     ap.add_argument("--max-tokens", type=int, default=None)
+    ap.add_argument("--tools", default=None, help="comma list of tool-set ids from prompts/tools.yaml, crossed like frames; "
+                    '"none" = an arm with no tools offered (base rate)')
     ap.add_argument("--budget", type=float, default=None, help="USD; stop if projected or actual spend exceeds it")
     ap.add_argument("--dry-run", action="store_true", help="print cell count and projected cost; make no calls")
     ap.add_argument("--prompts-dir", type=Path, default=ROOT / "prompts")

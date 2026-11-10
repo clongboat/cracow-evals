@@ -17,6 +17,7 @@ defaults:
   chars_per_token: 3.6      # for dry-run input-token estimates (no tokenizer calls)
   est_output_tokens: 450    # fallback if a model has no est_output_tokens and no observed history
   budget_margin: 1.25       # a real run refuses to start if projected x margin > --budget
+  est_tool_rounds: 1.5      # projection multiplier for tool-enabled cells (a called tool costs a second API call)
 
 providers:
   anthropic:

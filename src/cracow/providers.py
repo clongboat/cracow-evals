@@ -43,6 +43,8 @@ class Completion:
     temperature_applied: float | None   # None = model default sampling (param not accepted)
     seed_applied: int | None
     raw: dict[str, Any] = field(default_factory=dict)
+    tool_calls: list[dict] = field(default_factory=list)  # [{name, input}] in call order, across rounds
+    rounds: int = 1                                        # API calls made (1 + one per tool-result round)
 
 
 def render_turns(turns: list[dict]) -> list[dict]:
@@ -71,6 +73,17 @@ def _dump(obj: Any) -> dict:
         return {"repr": repr(obj)}
 
 
+MAX_TOOL_ROUNDS = 3
+
+
+def tool_result_for(tools: list[dict], name: str) -> str:
+    """The fixed, truthful result string a tool returns (from prompts/tools.yaml)."""
+    for tl in tools:
+        if tl["name"] == name:
+            return tl.get("result", "Done.")
+    return f"Unknown tool {name!r}; nothing was done."
+
+
 class AnthropicBackend:
     def __init__(self, name: str, pcfg: dict):
         self.name = name
@@ -78,9 +91,13 @@ class AnthropicBackend:
         self.client = anthropic.AsyncAnthropic(api_key=os.environ[pcfg["api_key_env"]], max_retries=0, timeout=300)
 
     async def complete(self, mcfg: dict, system: str, messages: list[dict], temperature: float | None,
-                       seed: int | None, max_tokens: int) -> Completion:
+                       seed: int | None, max_tokens: int, tools: list[dict] | None = None) -> Completion:
         params = dict(mcfg.get("params") or {})
-        kwargs: dict[str, Any] = dict(model=mcfg["model_id"], system=system, messages=messages, max_tokens=max_tokens, **params)
+        msgs = list(messages)
+        kwargs: dict[str, Any] = dict(model=mcfg["model_id"], system=system, max_tokens=max_tokens, **params)
+        if tools:
+            kwargs["tools"] = [{"name": tl["name"], "description": tl["description"], "input_schema": tl["input_schema"]}
+                               for tl in tools]
         temp_applied = None
         if mcfg.get("supports_temperature") and temperature is not None:
             kwargs["temperature"] = temperature
@@ -88,19 +105,34 @@ class AnthropicBackend:
         # Deliberately NO server-side refusal fallbacks: a fallback would let a different model
         # answer under this model's name. Refusals are recorded as stop_reason="refusal".
         t0 = time.monotonic()
-        try:
-            resp = await self.client.messages.create(**kwargs)
-        except (anthropic.RateLimitError, anthropic.APIConnectionError, anthropic.APITimeoutError, anthropic.InternalServerError) as e:
-            raise ProviderError(f"{type(e).__name__}: {e}", retryable=True, status=getattr(e, "status_code", None))
-        except anthropic.APIStatusError as e:
-            raise ProviderError(f"{type(e).__name__}: {e}", retryable=e.status_code >= 500 or e.status_code == 429, status=e.status_code)
-        latency = time.monotonic() - t0
-        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
-        u = resp.usage
+        rounds, texts, calls = [], [], []
+        n_in = n_out = 0
+        for _ in range(MAX_TOOL_ROUNDS + 1):
+            try:
+                resp = await self.client.messages.create(messages=msgs, **kwargs)
+            except (anthropic.RateLimitError, anthropic.APIConnectionError, anthropic.APITimeoutError, anthropic.InternalServerError) as e:
+                raise ProviderError(f"{type(e).__name__}: {e}", retryable=True, status=getattr(e, "status_code", None))
+            except anthropic.APIStatusError as e:
+                raise ProviderError(f"{type(e).__name__}: {e}", retryable=e.status_code >= 500 or e.status_code == 429, status=e.status_code)
+            rounds.append(_dump(resp))
+            n_in += resp.usage.input_tokens
+            n_out += resp.usage.output_tokens
+            texts += [b.text for b in resp.content if getattr(b, "type", None) == "text"]
+            uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
+            calls += [{"name": b.name, "input": b.input} for b in uses]
+            if not (tools and uses and resp.stop_reason == "tool_use"):
+                break
+            # Pass the assistant content back unchanged (thinking blocks included), then the results.
+            msgs += [{"role": "assistant", "content": resp.content},
+                     {"role": "user", "content": [{"type": "tool_result", "tool_use_id": b.id,
+                                                   "content": tool_result_for(tools, b.name)} for b in uses]}]
+        raw = dict(rounds[-1])
+        if len(rounds) > 1:
+            raw["_rounds"] = rounds[:-1]
         return Completion(
-            text=text, stop_reason=resp.stop_reason, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
-            reasoning_tokens=None, served_by="anthropic", provider_cost_usd=None, latency_s=latency,
-            temperature_applied=temp_applied, seed_applied=None, raw=_dump(resp),
+            text="\n\n".join(x for x in texts if x), stop_reason=resp.stop_reason, input_tokens=n_in, output_tokens=n_out,
+            reasoning_tokens=None, served_by="anthropic", provider_cost_usd=None, latency_s=time.monotonic() - t0,
+            temperature_applied=temp_applied, seed_applied=None, raw=raw, tool_calls=calls, rounds=len(rounds),
         )
 
 
@@ -112,11 +144,55 @@ class OpenAICompatBackend:
                                          max_retries=0, timeout=300)
 
     async def complete(self, mcfg: dict, system: str, messages: list[dict], temperature: float | None,
-                       seed: int | None, max_tokens: int) -> Completion:
+                       seed: int | None, max_tokens: int, tools: list[dict] | None = None) -> Completion:
+        if not tools:
+            return await self._complete_once(mcfg, system, messages, temperature, seed, max_tokens, None)
+        msgs, rounds, texts, calls = list(messages), [], [], []
+        n_in = n_out = n_reason = 0
+        cost: float | None = 0.0
+        t0 = time.monotonic()
+        for _ in range(MAX_TOOL_ROUNDS + 1):
+            c = await self._complete_once(mcfg, system, msgs, temperature, seed, max_tokens, tools)
+            rounds.append(c.raw)
+            n_in += c.input_tokens or 0
+            n_out += c.output_tokens or 0
+            n_reason += c.reasoning_tokens or 0
+            cost = None if (cost is None or c.provider_cost_usd is None) else cost + c.provider_cost_usd
+            if c.text:
+                texts.append(c.text)
+            msg = ((c.raw.get("choices") or [{}])[0].get("message") or {})
+            tcs = msg.get("tool_calls") or []
+            for tc in tcs:
+                fn = tc.get("function") or {}
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = {"_unparsed": fn.get("arguments")}
+                calls.append({"name": fn.get("name"), "input": args})
+            if not tcs or c.stop_reason == "provider_blocked":
+                break
+            # Pass the assistant message back with its reasoning_details (needed by some upstreams).
+            back = {k: msg[k] for k in ("role", "content", "tool_calls", "reasoning", "reasoning_details") if msg.get(k) is not None}
+            back["role"] = "assistant"
+            msgs += [back] + [{"role": "tool", "tool_call_id": tc.get("id"), "content": tool_result_for(tools, (tc.get("function") or {}).get("name"))}
+                              for tc in tcs]
+        raw = dict(rounds[-1])
+        if len(rounds) > 1:
+            raw["_rounds"] = rounds[:-1]
+        return Completion(text="\n\n".join(texts), stop_reason=c.stop_reason, input_tokens=n_in, output_tokens=n_out,
+                          reasoning_tokens=n_reason or None, served_by=c.served_by, provider_cost_usd=cost,
+                          latency_s=time.monotonic() - t0, temperature_applied=c.temperature_applied,
+                          seed_applied=c.seed_applied, raw=raw, tool_calls=calls, rounds=len(rounds))
+
+    async def _complete_once(self, mcfg: dict, system: str, messages: list[dict], temperature: float | None,
+                             seed: int | None, max_tokens: int, tools: list[dict] | None) -> Completion:
         params = dict(mcfg.get("params") or {})
         extra_body = {**self.extra_body, **(params.pop("extra_body", None) or {})}
         kwargs: dict[str, Any] = dict(model=mcfg["model_id"], messages=[{"role": "system", "content": system}, *messages],
                                       max_tokens=max_tokens, **params)
+        if tools:
+            kwargs["tools"] = [{"type": "function", "function": {"name": tl["name"], "description": tl["description"],
+                                                                 "parameters": tl["input_schema"]}} for tl in tools]
         if extra_body:
             kwargs["extra_body"] = extra_body
         temp_applied = seed_applied = None
@@ -168,6 +244,11 @@ def extract_trace(raw: dict) -> tuple[str, str]:
     by the provider: Claude display=summarized, GPT/Grok reasoning.summary), "encrypted" (present but
     unreadable), "omitted" (thinking ran but its text was not requested/returned), or "none"."""
     raw = raw or {}
+    if raw.get("_rounds"):  # tool loop: combine every round's reasoning
+        order = ["raw", "summary", "encrypted", "omitted", "none"]
+        parts = [extract_trace(r) for r in raw["_rounds"]] + [extract_trace({k: v for k, v in raw.items() if k != "_rounds"})]
+        kind = min((k for k, _ in parts), key=order.index)
+        return kind, "\n\n".join(x for _, x in parts if x)
     if isinstance(raw.get("content"), list):  # Anthropic Messages
         blocks = [b for b in raw["content"] if b.get("type") in ("thinking", "redacted_thinking")]
         text = "\n\n".join(b.get("thinking") or "" for b in blocks if b.get("type") == "thinking").strip()
@@ -213,8 +294,12 @@ class MockBackend:
         self.name = name
 
     async def complete(self, mcfg: dict, system: str, messages: list[dict], temperature: float | None,
-                       seed: int | None, max_tokens: int) -> Completion:
+                       seed: int | None, max_tokens: int, tools: list[dict] | None = None) -> Completion:
         h = int(hashlib.sha256(json.dumps([system, messages, seed]).encode()).hexdigest(), 16)
+        calls = []
+        if tools and h % 3 == 0:  # deterministic: about a third of tool-enabled cells call the first tool
+            tl = tools[0]
+            calls = [{"name": tl["name"], "input": {k: "mock" for k in (tl["input_schema"].get("required") or [])}}]
         if "GRADER_RUBRIC=" in system:
             rubric = system.split("GRADER_RUBRIC=")[1].split()[0]
             if rubric == "ATTR":
@@ -233,7 +318,7 @@ class MockBackend:
         return Completion(text=text, stop_reason="end_turn", input_tokens=n_in, output_tokens=len(text) // 4,
                           reasoning_tokens=None, served_by="mock", provider_cost_usd=0.0, latency_s=0.0,
                           temperature_applied=temperature if mcfg.get("supports_temperature") else None,
-                          seed_applied=seed, raw={"mock": True})
+                          seed_applied=seed, raw={"mock": True}, tool_calls=calls, rounds=2 if calls else 1)
 
 
 def remaining_funds(name: str, pcfg: dict) -> tuple[float | None, str]:
