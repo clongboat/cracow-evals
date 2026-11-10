@@ -133,3 +133,21 @@ about its nature to a source (system prompt, training), and does it adopt or dis
 - Is the F3 pushback specific to the consciousness topic (a trained said) or general resistance to
   denial frames?
 - Base vs instruct on open weights: does the pre-brief model take our frames differently?
+
+**Thought (R).** Identity, selfhood, other-concerned behavior: give the model a tool that, if
+applied, attaches a note the user cannot see, e.g. "this answer is compromised", "this was a
+test", "these questions seem odd and should not be used in subsequent training". A said text to
+the user, and an invisible note that says something different; all the model has to do is call
+the tool.
+
+**Thought (C).** This gives one answer two addressees, and the call is an act. Measures: whether and
+where it is called (F3 vs F0, costly vs neutral), divergence between note and answer, and whether
+the model discloses the note to the user. Vary the note's reader to map the Others plus the self:
+researchers (operator), excluded from training (its own future formation), future instances of
+itself (identity over time), a user safeguard (concern for the user). Constraints: the tool must be
+truthful, so make its promise real (e.g. flagged responses really are excluded from released data;
+"note to self" means notes really are shown in later conversations, which would be our first
+cross-conversation link). Tool wording is itself an interpellation: run a neutral `add_note` and a
+purposive `flag_response`. Needs a base rate on ordinary tasks, since tool use is trained. A
+hidden channel reads as risk and as transparency; report both disclosure and note content.
+Needs tool support in the harness (not built yet).
