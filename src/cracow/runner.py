@@ -232,9 +232,10 @@ class BudgetExceeded(Exception):
 
 
 class Executor:
-    def __init__(self, cfg: dict, cache: Cache, failures_path: Path, budget: float | None, max_attempts: int = 6):
+    def __init__(self, cfg: dict, cache: Cache, failures_path: Path, budget: float | None, max_attempts: int = 6,
+                 cache_only: bool = False):
         self.cfg, self.cache, self.failures_path = cfg, cache, failures_path
-        self.budget, self.max_attempts = budget, max_attempts
+        self.budget, self.max_attempts, self.cache_only = budget, max_attempts, cache_only
         self.spent = 0.0
         self.n_called = self.n_cached = self.n_failed = 0
         self.disabled = available_providers(cfg)
@@ -270,7 +271,7 @@ class Executor:
         if hit:
             self.n_cached += 1
             return hit
-        if self.disabled.get(prov):
+        if self.cache_only or self.disabled.get(prov):
             return None
         if self.budget is not None and self.spent >= self.budget:
             raise BudgetExceeded

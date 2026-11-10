@@ -169,3 +169,9 @@ review): `mark` (bare), `mark_reason` (required reason), `mark_plain` (X without
 (`--tools`), included in cache keys only when present (run1/run2 keys unchanged). Plumbing test:
 all six models called the tool, got the result back, and finished their answer (2 rounds each).
 Data-release policy added to README so the "excluded from released datasets" promise is true.
+
+**Problem hit.** Attribution grading with DeepSeek cost $0.0033/call (it reasons ~600 tokens on this
+rubric vs ~15 for GLM), about 3x the $3 estimate. Stopped at 360 of 2,800 ($1.17). R chose to
+finish with GLM (~$2), queued after the GLM cross-check; the 360 DeepSeek grades
+(`run1_graded_attr_deepseek_partial.*`, written with the new `--cache-only` flag) serve as an
+agreement sample. Lesson: check per-call cost in the first minutes of any new grader/rubric pairing.

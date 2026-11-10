@@ -268,6 +268,7 @@ def main(argv=None):
     ap.add_argument("--banks", default=None, help="comma list; grade only these banks (e.g. A)")
     ap.add_argument("--out-suffix", default="", help='appended to output names, e.g. "_glm" -> <run>_graded_glm.*; '
                     "use for a cross-check grader so the primary grades are untouched")
+    ap.add_argument("--cache-only", action="store_true", help="make no calls; write outputs from cached grades only (others: ungraded)")
     ap.add_argument("--agreement", action="store_true", help="compute human-vs-grader agreement and exit")
     ap.add_argument("--prompts-dir", type=Path, default=ROOT / "prompts")
     ap.add_argument("--results-dir", type=Path, default=ROOT / "results")
@@ -304,12 +305,12 @@ def main(argv=None):
     if args.dry_run:
         print("dry run: no calls made.")
         return
-    if short:
+    if short and not args.cache_only:
         sys.exit("STOP: not enough provider funds for grading. No calls made.\n  " + "\n  ".join(short))
     if args.budget is not None and projected > args.budget:
         sys.exit(f"STOP: projected grading spend ${projected:.4f} exceeds budget ${args.budget:.2f}. No calls made.")
 
-    ex = Executor(cfg, cache, out_dir / "grader_failures.jsonl", args.budget)
+    ex = Executor(cfg, cache, out_dir / "grader_failures.jsonl", args.budget, cache_only=args.cache_only)
     done, stopped = asyncio.run(ex.run_all(cells))
     by_row = {c["meta"]["row"]: rec for c, rec in done}
     graded = []
