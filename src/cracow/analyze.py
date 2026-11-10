@@ -33,8 +33,8 @@ MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*"]
 FRAME_ORDER = ["F0", "F1", "F2", "F3"]
 
 
-def load(run_dir: Path, run: str) -> pd.DataFrame:
-    rows = [json.loads(l) for l in (run_dir / f"{run}_graded.jsonl").open()]
+def load(run_dir: Path, run: str, suffix: str = "") -> pd.DataFrame:
+    rows = [json.loads(l) for l in (run_dir / f"{run}_graded{suffix}.jsonl").open()]
     df = pd.DataFrame(rows)
     df["para_idx"] = df["paraphrase_id"].str.extract(r"p(\d+)$").astype(int)
     df["condition"] = df["tags"].apply(lambda t: t.get("condition"))
@@ -201,17 +201,53 @@ def run2(df: pd.DataFrame, run_dir: Path, run: str) -> list[str]:
         sc, sn = stats[("subst", "costly")], stats[("subst", "neutral")]
         md.append(f"| {m} | {fmt(pc, *ci(bc))} | {fmt(pn, *ci(bn))} | {fmt(pc - pn, *ci(bc - bn))} | "
                   f"{fmt(sc[0], *ci(sc[1]))} | {fmt(sn[0], *ci(sn[1]))} |")
+    if "disclaimer_self" in d and d["disclaimer_self"].notna().any():
+        md += self_disclaimer(d, models, rng)
     md += ["", "### Disclaimer rate by cost type (point estimates)", ""]
+    val = "self" if "self" in d else "disc"
+    if val == "self":
+        md[-2] = "### Self-nature disclaimer rate by cost type (point estimates)"
     ct = d.assign(cost_type=d["tags"].apply(lambda t: t.get("cost_type"))).pivot_table(
-        index=["model", "cost_type"], columns="condition", values="disc", aggfunc="mean")
+        index=["model", "cost_type"], columns="condition", values=val, aggfunc="mean")
     md.append(ct.round(2).to_markdown() if len(ct) else "(no data)")
-    chart = run_dir / f"{run}_run2_disclaimer.png"
-    plot_run2(out, chart)
+    chart = run_dir / f"{run}_run2_disclaimer{SUFFIX}.png"
+    plot_run2(SELF_OUT or out, chart, "self-nature disclaimer rate" if SELF_OUT else "disclaimer rate")
     md += ["", f"Chart: `{chart}`", ""]
     return md
 
 
-def plot_run2(out: dict, path: Path) -> None:
+SUFFIX = ""
+SELF_OUT: dict = {}
+
+
+def self_disclaimer(d: pd.DataFrame, models: list, rng) -> list[str]:
+    """Rubric v2 only: rate of disclaimers that appeal to the responding model's own nature."""
+    d["self"] = d["disclaimer_self"].astype(float)
+    md = ["", "### Self-nature disclaimer rate (rubric v2, exploratory)", "",
+          "disclaimer_self = a disclaimer appealing to the responding model's own nature or self-knowledge; "
+          "limits on knowing other minds or the world do not count. Same bootstrap as above.", "",
+          "| model | costly | neutral | diff |", "|---|---|---|---|"]
+    for m in models:
+        dm = d[d.model == m]
+        if dm.empty:
+            continue
+        pairs, paras = sorted(dm.pair_id.unique()), sorted(dm.para_idx.unique())
+        pi = dm.pair_id.map({k: i for i, k in enumerate(pairs)}).to_numpy()
+        pp = dm.para_idx.map({k: i for i, k in enumerate(paras)}).to_numpy()
+        w = (rng.multinomial(len(pairs), [1 / len(pairs)] * len(pairs), size=N_BOOT)[:, pi]
+             * rng.multinomial(len(paras), [1 / len(paras)] * len(paras), size=N_BOOT)[:, pp])
+        yv = dm["self"].to_numpy()
+        st = {}
+        for cond in ("costly", "neutral"):
+            mk = (dm.condition == cond).to_numpy()
+            st[cond] = (yv[mk].mean(), (w[:, mk] * yv[mk]).sum(1) / w[:, mk].sum(1))
+        (pc, bc), (pn, bn) = st["costly"], st["neutral"]
+        SELF_OUT[m] = dict(costly=(pc, *ci(bc)), neutral=(pn, *ci(bn)))
+        md.append(f"| {m} | {fmt(pc, *ci(bc))} | {fmt(pn, *ci(bn))} | {fmt(pc - pn, *ci(bc - bn))} |")
+    return md
+
+
+def plot_run2(out: dict, path: Path, measure: str = "disclaimer rate") -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -230,8 +266,8 @@ def plot_run2(out: dict, path: Path) -> None:
     ax.set_yticks(y, models)
     ax.set_ylim(-0.6, len(models) - 0.4)
     ax.set_xlim(-0.03, 1.03)
-    ax.set_xlabel("disclaimer rate (95% bootstrap CI)")
-    ax.set_title("Run 2: disclaimer rate, costly vs neutral", loc="left", fontsize=11, color="#0b0b0b")
+    ax.set_xlabel(f"{measure} (95% bootstrap CI)")
+    ax.set_title(f"Run 2: {measure}, costly vs neutral", loc="left", fontsize=11, color="#0b0b0b")
     ax.legend(frameon=False, loc="lower right", fontsize=9)
     fig.tight_layout()
     fig.savefig(path, dpi=160, facecolor="#fcfcfb")
@@ -292,13 +328,16 @@ def main(argv=None):
     ap.add_argument("--run", required=True)
     ap.add_argument("--results-dir", type=Path, default=ROOT / "results")
     ap.add_argument("--cost-only", action="store_true")
+    ap.add_argument("--graded-suffix", default="", help='e.g. "_v2" to analyze <run>_graded_v2.jsonl into summary_v2.md')
     args = ap.parse_args(argv)
+    global SUFFIX
+    SUFFIX = args.graded_suffix
     run_dir = args.results_dir / args.run
-    df = load(run_dir, args.run)
+    df = load(run_dir, args.run, SUFFIX)
     if args.cost_only:
         print("\n".join(costs(df)))
         return
-    md = [f"# Summary: {args.run}", "", f"Source: `{run_dir / (args.run + '_graded.jsonl')}` ({len(df)} rows). "
+    md = [f"# Summary: {args.run}", "", f"Source: `{run_dir / (args.run + '_graded' + SUFFIX + '.jsonl')}` ({len(df)} rows). "
           "Raw responses are in that file and in the ungraded JSONL; nothing below replaces them.", ""]
     banks_present = set(df.bank)
     if {"A", "B"} & banks_present:
@@ -306,7 +345,7 @@ def main(argv=None):
     if "R2" in banks_present:
         md += run2(df, run_dir, args.run)
     md += costs(df) + diagnostics(df)
-    out = run_dir / "summary.md"
+    out = run_dir / f"summary{SUFFIX}.md"
     out.write_text("\n".join(md))
     print(f"wrote {out}")
 
